@@ -1,0 +1,2043 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>생산 MD 대시보드</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11,11,11,0.10);
+    --th-bg: #f2f2ee;
+    --series-1: #2a78d6;
+    --compare: #c3c2b7;
+    --up: #006300;
+    --down: #d03b3b;
+    --warn: #a35f00;
+    --accent-wash: rgba(42,120,214,0.10);
+    --bad-wash: rgba(208,59,59,0.08);
+    --warn-wash: rgba(163,95,0,0.08);
+    --ok-wash: rgba(0,99,0,0.07);
+    --c1: #2a78d6; --c2: #eb6834; --c3: #1baf7a; --c4: #eda100;
+    --c5: #e87ba4; --c6: #008300; --c7: #6250d6; --c8: #e34948;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255,255,255,0.10);
+      --th-bg: #222221;
+      --series-1: #3987e5;
+      --compare: #52514e;
+      --up: #0ca30c;
+      --down: #e66767;
+      --warn: #e0a030;
+      --accent-wash: rgba(57,135,229,0.14);
+      --bad-wash: rgba(230,103,103,0.13);
+      --warn-wash: rgba(224,160,48,0.12);
+      --ok-wash: rgba(12,163,12,0.10);
+      --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500;
+      --c5: #d55181; --c6: #008300; --c7: #9085e9; --c8: #e66767;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255,255,255,0.10);
+    --th-bg: #222221;
+    --series-1: #3987e5;
+    --compare: #52514e;
+    --up: #0ca30c;
+    --down: #e66767;
+    --warn: #e0a030;
+    --accent-wash: rgba(57,135,229,0.14);
+    --bad-wash: rgba(230,103,103,0.13);
+    --warn-wash: rgba(224,160,48,0.12);
+    --ok-wash: rgba(12,163,12,0.10);
+    --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500;
+    --c5: #d55181; --c6: #008300; --c7: #9085e9; --c8: #e66767;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 32px 20px 64px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+  h1 { font-size: 24px; margin: 0 0 2px; font-weight: 700; }
+  .sub { color: var(--text-secondary); font-size: 14px; }
+  button, select, input[type="date"], input[type="search"] {
+    font: inherit; font-size: 14px; color: var(--text-primary); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px; padding: 7px 14px; cursor: pointer;
+  }
+  input[type="search"] { cursor: text; min-width: 0; }
+  button:hover { background: var(--accent-wash); }
+  button.primary { background: var(--series-1); color: #fff; border-color: transparent; }
+  a { color: inherit; text-decoration: none; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; min-width: 0; }
+
+  /* 빈 화면 */
+  .drop {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    min-height: 400px; text-align: center; border: 2px dashed var(--axis); border-radius: 14px; background: var(--surface); padding: 28px;
+  }
+  .drop.over { border-color: var(--series-1); background: var(--accent-wash); }
+  .drop p { margin: 0; color: var(--text-secondary); }
+  .drop .big { font-size: 20px; color: var(--text-primary); font-weight: 650; }
+  .drop ul { margin: 0; padding: 0; list-style: none; color: var(--text-secondary); font-size: 14px; display: grid; gap: 6px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  /* 데이터 출처 */
+  .sources { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; font-size: 13px; color: var(--text-secondary); }
+  .src { border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; background: var(--surface); }
+  .src b { color: var(--text-primary); font-weight: 600; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 600; color: var(--warn); border: 1px solid currentColor; border-radius: 999px; padding: 0 8px; line-height: 1.6; white-space: nowrap; }
+
+  /* 필터 */
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 20px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+  .seg button { border: 0; border-radius: 0; padding: 7px 14px; white-space: nowrap; }
+  #periodSeg { max-width: 100%; overflow-x: auto; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--series-1); color: #fff; font-weight: 600; }
+  .custom { display: none; gap: 6px; align-items: center; }
+  .custom.show { display: inline-flex; }
+  .range-label { color: var(--text-secondary); font-size: 13px; margin-left: auto; }
+
+  /* 중요 알림 */
+  .alerts-top { border-left: 4px solid var(--down); margin-bottom: 20px; }
+  .alerts-top.calm { border-left-color: var(--up); }
+  .alert-sum { font-size: 14px; color: var(--text-secondary); }
+  .alert-sum b { font-weight: 700; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .chips button { border-radius: 999px; padding: 4px 12px; font-size: 13px; }
+  .chips button b { font-weight: 700; margin-left: 2px; }
+  .chips button[aria-pressed="true"] { background: var(--text-primary); color: var(--surface); border-color: transparent; }
+  .more { margin-top: 12px; }
+
+  /* KPI */
+  .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-bottom: 16px; }
+  .kpi { border-top: 3px solid var(--series-1); padding: 20px; }
+  .kpi .label { color: var(--text-secondary); font-size: 14px; font-weight: 500; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .kpi .value { font-size: 32px; font-weight: 700; margin: 6px 0 4px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .kpi.is-bad { border-top-color: var(--down); background: linear-gradient(var(--bad-wash), var(--bad-wash)), var(--surface); }
+  .kpi.is-bad .value { color: var(--down); }
+  .kpi.is-warn { border-top-color: var(--warn); background: linear-gradient(var(--warn-wash), var(--warn-wash)), var(--surface); }
+  .kpi.is-warn .value { color: var(--warn); }
+  .kpi .meter { margin: 6px 0; }
+  .kpis.sales { grid-template-columns: repeat(4, 1fr); margin-top: 16px; }
+  .kpis.sales .kpi { border-top: 1px solid var(--border); }
+  .kpis.sales .kpi .value { font-size: 26px; }
+  .delta { font-size: 13px; color: var(--text-secondary); }
+  .delta b { font-weight: 600; }
+  .up { color: var(--up); }
+  .down { color: var(--down); }
+
+  /* 업무 흐름 */
+  .flow { list-style: none; margin: 0 0 8px; padding: 0; display: grid; grid-template-columns: repeat(6, 1fr); overflow: hidden; }
+  .flow li { position: relative; border-right: 1px solid var(--border); }
+  .flow li:last-child { border-right: 0; }
+  .flow a { display: grid; gap: 4px; align-content: start; padding: 18px 20px 18px 22px; height: 100%; }
+  .flow a:hover { background: var(--accent-wash); }
+  .flow li:not(:last-child)::after {
+    content: "›"; position: absolute; right: -11px; top: 50%; transform: translateY(-50%); z-index: 1;
+    width: 22px; height: 22px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border);
+    display: grid; place-items: center; font-size: 15px; line-height: 1; color: var(--text-muted);
+  }
+  .flow .step { font-size: 13px; font-weight: 650; color: var(--series-1); }
+  .flow .v { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .flow .s { font-size: 13px; color: var(--text-secondary); min-height: 2.6em; }
+  .flow .chip { justify-self: start; }
+
+  /* 차트·카드 */
+  .charts { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; margin-top: 16px; }
+  .charts.single { grid-template-columns: 1fr; }
+  .charts.half { grid-template-columns: 1fr 1fr; }
+  .charts > * { min-width: 0; }
+  .donut-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; }
+  .donut-box { position: relative; width: 210px; height: 210px; flex: 0 0 auto; }
+  .donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+  .donut-center .t { font-size: 12px; color: var(--text-secondary); }
+  .donut-center .v { font-size: 19px; font-weight: 700; }
+  .cat-legend { list-style: none; margin: 0; padding: 0; flex: 1 1 180px; min-width: 0; display: grid; gap: 8px; font-size: 14px; }
+  .cat-legend li { display: grid; grid-template-columns: 10px 1fr auto auto; gap: 8px; align-items: center; }
+  .cat-legend .dot { width: 10px; height: 10px; border-radius: 2px; }
+  .cat-legend .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cat-legend .val { color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
+  .table-box { max-height: 440px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+  .table-box table { margin: 0; }
+  .table-box th { position: sticky; top: 0; z-index: 1; }
+  .table-box th, .table-box td { white-space: nowrap; }
+  .barcell { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+  .track { width: 88px; height: 8px; flex: 0 0 auto; border-radius: 2px; background: var(--grid); overflow: hidden; }
+  .bar { display: block; height: 100%; border-radius: 2px; background: var(--series-1); }
+  .card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .card-head h2 { font-size: 17px; margin: 0; font-weight: 650; display: flex; gap: 8px; align-items: center; }
+  .note { font-size: 13px; color: var(--text-secondary); margin: -6px 0 14px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+  .legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 6px; border-radius: 1px; }
+  .legend i.sq { width: 10px; height: 10px; border-radius: 2px; }
+  .chart-box { position: relative; height: 290px; }
+  details { margin-top: 12px; font-size: 13px; color: var(--text-secondary); }
+  summary { cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--grid); font-size: 14px; }
+  th { font-size: 13px; color: var(--text-secondary); font-weight: 600; background: var(--th-bg); border-bottom: 1px solid var(--axis); }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num, th.num { text-align: right; }
+  td.strong { font-weight: 600; }
+  td.dim { color: var(--text-secondary); }
+  tr.r-bad td:first-child { box-shadow: inset 3px 0 0 var(--down); }
+  tr.r-warn td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+  th button.sort { border: 0; padding: 0; background: none; color: inherit; font: inherit; }
+  th[aria-sort="ascending"] button.sort::after { content: " ↑"; }
+  th[aria-sort="descending"] button.sort::after { content: " ↓"; }
+  tbody.pick tr { cursor: pointer; }
+  tbody.pick tr:hover td, tr.on td { background: var(--accent-wash); }
+
+  /* 섹션 */
+  .section-title { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 56px 0 6px; padding-top: 28px; border-top: 1px solid var(--border); scroll-margin-top: 12px; }
+  .section-title h2 { font-size: 22px; margin: 0; font-weight: 700; }
+  .section-title .no { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--series-1); color: #fff; font-size: 14px; font-weight: 700; }
+  .section-note { font-size: 14px; color: var(--text-secondary); margin: 0 0 4px; }
+  .minis { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .mini { background: var(--page); border-radius: 10px; padding: 12px 14px; }
+  .mini .label { font-size: 13px; color: var(--text-secondary); }
+  .mini .v { font-size: 21px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .mini.bad .v { color: var(--down); }
+  .mini.warn .v { color: var(--warn); }
+  .stages { list-style: none; margin: 0 0 14px; padding: 0; display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+  .stage { border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: grid; gap: 4px; }
+  .stage .name { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
+  .stage .v { font-size: 22px; font-weight: 700; }
+  .stage.late { border-color: var(--down); background: var(--bad-wash); }
+  .meter { display: block; height: 6px; border-radius: 2px; background: var(--grid); overflow: hidden; }
+  .meter > span { display: block; height: 100%; border-radius: 2px; background: var(--series-1); }
+  .statuses { display: grid; gap: 10px; }
+  .status-row { display: grid; grid-template-columns: 56px 44px 96px 1fr; gap: 10px; align-items: center; font-size: 14px; }
+  .status-row .names { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip { display: inline-block; font-size: 12px; font-weight: 600; border: 1px solid currentColor; border-radius: 999px; padding: 0 9px; line-height: 1.7; white-space: nowrap; }
+  .chip.t-bad { background: var(--bad-wash); }
+  .chip.t-warn { background: var(--warn-wash); }
+  .chip.t-ok { background: var(--ok-wash); }
+  .t-bad { color: var(--down); }
+  .t-warn { color: var(--warn); }
+  .t-ok { color: var(--up); }
+  .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .tools input[type="search"] { flex: 1 1 220px; }
+  .tools label { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--text-secondary); }
+  .defs { margin: 0; padding-left: 1.2em; font-size: 14px; color: var(--text-secondary); display: grid; gap: 6px; }
+  .defs-title { font-size: 14px; font-weight: 650; margin: 16px 0 6px; }
+
+  .mapping { margin-top: 16px; font-size: 14px; color: var(--text-secondary); }
+  .mapping .row { margin-top: 8px; }
+  .mapping label { display: inline-flex; gap: 6px; align-items: center; }
+  .error { color: var(--down); font-size: 14px; }
+  .hidden { display: none !important; }
+
+  @media (max-width: 1100px) {
+    .kpis { grid-template-columns: repeat(3, 1fr); }
+    .flow { grid-template-columns: repeat(3, 1fr); }
+    .flow li:nth-child(3) { border-right: 0; }
+    .flow li:nth-child(-n+3) { border-bottom: 1px solid var(--border); }
+    .flow li:nth-child(3)::after { display: none; }
+    .stages { grid-template-columns: repeat(4, 1fr); }
+  }
+  @media (max-width: 800px) {
+    .wrap { padding: 24px 16px 48px; }
+    .kpis, .kpis.sales { grid-template-columns: 1fr 1fr; gap: 12px; }
+    .kpi { padding: 16px; }
+    .kpi .value { font-size: 24px; }
+    .card { padding: 16px; }
+    .charts, .charts.half { grid-template-columns: 1fr; }
+    .flow { grid-template-columns: 1fr 1fr; }
+    .flow li { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .flow li:nth-child(2n) { border-right: 0; }
+    .flow li:not(:last-child)::after { display: none; }
+    .stages { grid-template-columns: 1fr 1fr; }
+    .range-label { margin-left: 0; width: 100%; }
+    .track { display: none; }
+    .section-title { margin-top: 40px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>생산 MD 대시보드</h1>
+      <div class="sub" id="fileName">매출 파일을 불러오세요. 발주·재고·원부자재·검품 파일은 함께 넣어도 되고 나중에 넣어도 됩니다.</div>
+    </div>
+    <div class="row">
+      <button id="pickBtn">파일 불러오기</button>
+      <button id="templateBtn">입력 양식 받기</button>
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" multiple hidden>
+    </div>
+  </header>
+
+  <!-- 빈 화면 -->
+  <section id="empty" class="drop">
+    <p class="big">파일을 여기에 끌어다 놓으세요 (여러 개 한 번에 가능)</p>
+    <p>엑셀(.xlsx) · CSV 지원. 파일은 이 브라우저 안에서만 읽고, 어디에도 전송하지 않습니다.</p>
+    <ul>
+      <li><b>매출 파일 (필수)</b>: 날짜와 금액 열만 있으면 됩니다. 상품·카테고리·수량·반품여부 열이 있으면 더 자세히 보여드립니다.</li>
+      <li><b>발주·생산 (선택)</b>: 발주번호, 생산단계 열이 있는 파일 (시즌·거래처·생산완료예정일·입고수량 열 인식)</li>
+      <li><b>옵션 재고 (선택)</b>: 컬러, 사이즈, 현재재고 열이 있는 파일</li>
+      <li><b>원부자재 (선택)</b>: 자재코드, 자재명 열이 있는 파일</li>
+      <li><b>검품 (선택)</b>: 검품수량, 불량수량, 불량유형 열이 있는 파일</li>
+      <li>없는 파일은 매출 파일의 상품으로 만든 <b>샘플</b>을 보여주고 "샘플"이라고 표시합니다.</li>
+      <li>엑셀 한 파일에 시트로 나눠 넣어도 됩니다. 열 이름은 "입력 양식 받기"의 양식을 따라 주세요.</li>
+    </ul>
+    <div class="row">
+      <button class="primary" id="pickBtn2">파일 선택</button>
+      <button id="sampleBtn">샘플 데이터로 미리보기</button>
+    </div>
+    <p class="error" id="error"></p>
+  </section>
+
+  <!-- 대시보드 -->
+  <main id="dash" class="hidden">
+    <div class="sources" id="sources"></div>
+
+    <div class="filters">
+      <select id="catSelect" aria-label="카테고리"></select>
+      <div class="seg" id="periodSeg" role="group" aria-label="판매 기간">
+        <button data-p="7">최근 7일</button>
+        <button data-p="30">최근 30일</button>
+        <button data-p="mtd">이번 달</button>
+        <button data-p="90">최근 90일</button>
+        <button data-p="all">전체</button>
+        <button data-p="custom">직접 선택</button>
+      </div>
+      <span class="custom" id="customRange">
+        <input type="date" id="fromDate" aria-label="시작일"> ~ <input type="date" id="toDate" aria-label="종료일">
+      </span>
+      <span class="range-label" id="rangeLabel"></span>
+    </div>
+
+    <!-- 중요 알림 -->
+    <section class="card alerts-top" id="alertCard">
+      <div class="card-head">
+        <h2>중요 알림 <span class="badge any-badge">샘플 포함</span></h2>
+        <span class="alert-sum" id="alertSum"></span>
+      </div>
+      <div class="chips" id="alertChips" role="group" aria-label="알림 종류"></div>
+      <div class="table-box" style="max-height: none">
+        <table>
+          <thead><tr><th>구분</th><th>대상</th><th>내용</th><th class="num">재고</th><th>관련 일정</th><th>상태</th></tr></thead>
+          <tbody id="alertBody" class="pick"></tbody>
+        </table>
+      </div>
+      <button class="more hidden" id="alertMore"></button>
+    </section>
+
+    <!-- 핵심 KPI -->
+    <section class="kpis">
+      <div class="card kpi"><div class="label">총 발주 수량 <span class="badge prod-badge">샘플</span></div><div class="value" id="kPoQty"></div><div class="delta" id="kPoQtySub"></div></div>
+      <div class="card kpi"><div class="label">생산 진행률 <span class="badge prod-badge">샘플</span></div><div class="value" id="kProgress"></div><div class="delta" id="kProgressSub"></div></div>
+      <div class="card kpi"><div class="label">납기 준수율 <span class="badge prod-badge">샘플</span></div><div class="value" id="kOnTime"></div><div class="delta" id="kOnTimeSub"></div></div>
+      <div class="card kpi"><div class="label">불량률 <span class="badge qc-badge">샘플</span></div><div class="value" id="kDefect"></div><div class="delta" id="kDefectSub"></div></div>
+      <div class="card kpi"><div class="label">지연 발주 <span class="badge prod-badge">샘플</span></div><div class="value" id="kLate"></div><div class="delta" id="kLateSub"></div></div>
+      <div class="card kpi"><div class="label">생산 완료 수량 <span class="badge prod-badge">샘플</span></div><div class="value" id="kDone"></div><div class="delta" id="kDoneSub"></div></div>
+    </section>
+
+    <!-- 업무 흐름 -->
+    <ol class="card flow" id="flow" style="padding: 0"></ol>
+    <p class="section-note" id="opsNote"></p>
+
+    <!-- ① 발주·생산 -->
+    <div class="section-title" id="secProd"><span class="no">1</span><h2>발주·생산</h2><span class="badge prod-badge">샘플</span></div>
+
+    <section class="card" style="margin-top: 16px">
+      <div class="card-head"><h2>생산 진행 현황</h2><span class="sub">발주 확정부터 입고 완료까지 · 단계별 발주 건수와 수량</span></div>
+      <ol class="stages" id="stages"></ol>
+      <div class="sub">생산 진행률(생산 완료 이상 단계의 발주 수량 비중) <b id="progress"></b></div>
+    </section>
+
+    <section class="charts half">
+      <div class="card">
+        <div class="card-head"><h2>발주 현황</h2></div>
+        <div class="minis">
+          <div class="mini"><div class="label">총 발주 건수</div><div class="v" id="poCount"></div></div>
+          <div class="mini"><div class="label">총 발주 수량</div><div class="v" id="poQty"></div></div>
+          <div class="mini"><div class="label">총 발주 금액</div><div class="v" id="poAmount"></div></div>
+          <div class="mini"><div class="label">진행 중 발주</div><div class="v" id="poOpen"></div></div>
+        </div>
+        <div class="table-box" style="max-height: 320px">
+          <table>
+            <thead><tr><th>상품</th><th class="num">발주 건수</th><th class="num">발주 수량</th><th class="num">발주 금액</th><th class="num">진행 중 수량</th></tr></thead>
+            <tbody id="poBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>납기·생산 지연 현황</h2><span class="sub" id="lateSub"></span></div>
+        <p class="note">납기 지연: 입고 전인데 납기일이 지남. 생산 지연: 생산 완료 전인데 생산 완료 예정일이 지남.</p>
+        <div class="table-box" style="max-height: 380px">
+          <table>
+            <thead><tr><th>구분</th><th>발주번호</th><th>거래처</th><th>상품</th><th>생산 단계</th><th>기한</th><th class="num">지연</th><th class="num">수량</th></tr></thead>
+            <tbody id="lateBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top: 16px">
+      <div class="card-head"><h2>거래처별 생산 현황</h2><span class="sub">지연·불량이 있는 거래처 먼저</span></div>
+      <div class="table-box">
+        <table>
+          <thead><tr><th>거래처</th><th class="num">발주 건수</th><th class="num">발주 수량</th><th class="num">생산 완료 수량</th><th class="num">진행률</th><th class="num">진행 중</th><th class="num">납기 지연</th><th class="num">납기 준수율</th><th class="num">불량률</th></tr></thead>
+          <tbody id="vendorBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top: 16px">
+      <div class="card-head"><h2>입고 및 납기 현황</h2><span class="sub">입고 수량은 실제 입고 기준, 차이 = 입고 − 발주</span></div>
+      <div class="minis">
+        <div class="mini"><div class="label">입고 예정 수량</div><div class="v" id="inbIncoming"></div></div>
+        <div class="mini"><div class="label">입고 대기 (생산 완료)</div><div class="v" id="inbWaiting"></div></div>
+        <div class="mini"><div class="label">입고 완료 수량</div><div class="v" id="inbReceived"></div></div>
+        <div class="mini"><div class="label">입고율 (입고 ÷ 발주)</div><div class="v" id="inbRate"></div></div>
+        <div class="mini"><div class="label">다음 입고 예정일</div><div class="v" id="inbNext"></div></div>
+        <div class="mini" id="inbLateBox"><div class="label">납기 지연</div><div class="v" id="inbLate"></div></div>
+      </div>
+      <div class="table-box" style="max-height: 380px">
+        <table>
+          <thead><tr><th>발주번호</th><th>거래처</th><th>상품</th><th class="num">발주 수량</th><th class="num">입고 수량</th><th class="num">차이</th><th>생산 단계</th><th>생산 완료 예정</th><th>납기일</th><th>입고일</th><th>상태</th></tr></thead>
+          <tbody id="inbBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ② 원부자재 -->
+    <div class="section-title" id="secMat"><span class="no">2</span><h2>원부자재</h2><span class="badge mat-badge">샘플</span></div>
+    <p class="section-note">과부족 = 현재 재고 + 입고 예정 − 소요 예정. 0보다 작으면 생산에 필요한 자재가 모자랍니다.</p>
+    <section class="card" style="margin-top: 16px">
+      <div class="minis">
+        <div class="mini"><div class="label">관리 자재</div><div class="v" id="matCount"></div></div>
+        <div class="mini" id="matShortBox"><div class="label">자재 부족</div><div class="v" id="matShort"></div></div>
+        <div class="mini" id="matSafeBox"><div class="label">안전재고 미달</div><div class="v" id="matSafe"></div></div>
+        <div class="mini"><div class="label">입고 대기</div><div class="v" id="matWait"></div></div>
+        <div class="mini"><div class="label">다음 자재 입고</div><div class="v" id="matNext"></div></div>
+      </div>
+      <div class="table-box">
+        <table>
+          <thead><tr><th>자재코드</th><th>자재명</th><th>구분</th><th>거래처</th><th>사용 상품</th><th class="num">현재 재고</th><th class="num">안전재고</th><th class="num">소요 예정</th><th class="num">입고 예정</th><th>입고 예정일</th><th class="num">과부족</th><th>상태</th></tr></thead>
+          <tbody id="matBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ③ 품질 -->
+    <div class="section-title" id="secQc"><span class="no">3</span><h2>품질 관리</h2><span class="badge qc-badge">샘플</span></div>
+    <section class="card" style="margin-top: 16px">
+      <div class="minis" style="margin-bottom: 0">
+        <div class="mini"><div class="label">검품 수량</div><div class="v" id="qcInspected"></div></div>
+        <div class="mini" id="qcDefectsBox"><div class="label">불량 수량</div><div class="v" id="qcDefects"></div></div>
+        <div class="mini" id="qcRateBox"><div class="label">불량률</div><div class="v" id="qcRate"></div></div>
+        <div class="mini"><div class="label">재작업 수량</div><div class="v" id="qcRework"></div></div>
+        <div class="mini"><div class="label">재작업 비율 (재작업 ÷ 불량)</div><div class="v" id="qcReworkRate"></div></div>
+      </div>
+    </section>
+    <section class="charts">
+      <div class="card">
+        <div class="card-head"><h2>발주별 검품 결과</h2><span class="sub">불량률 높은 순</span></div>
+        <div class="table-box" style="max-height: 380px">
+          <table>
+            <thead><tr><th>발주번호</th><th>거래처</th><th>상품</th><th class="num">검품</th><th class="num">불량</th><th class="num">불량률</th><th class="num">재작업</th><th>주요 불량 유형</th><th>판정</th></tr></thead>
+            <tbody id="qcBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>불량 유형별 현황</h2></div>
+        <div class="chart-box" style="height: 260px"><canvas id="defectChart" aria-label="불량 유형별 수량 그래프" role="img"></canvas></div>
+        <details><summary>표로 보기</summary><table id="defectTable"></table></details>
+      </div>
+    </section>
+
+    <!-- ④ 재고 -->
+    <div class="section-title" id="secStock"><span class="no">4</span><h2>재고 관리</h2><span class="badge stock-badge">샘플</span></div>
+    <section class="charts half">
+      <div class="card">
+        <div class="card-head"><h2>재고 현황</h2></div>
+        <div class="minis">
+          <div class="mini"><div class="label">전체 재고</div><div class="v" id="invStock"></div></div>
+          <div class="mini"><div class="label">판매 가능 재고</div><div class="v" id="invAvail"></div></div>
+          <div class="mini" id="invLowBox"><div class="label">안전재고 미달 옵션</div><div class="v" id="invLow"></div></div>
+          <div class="mini" id="invOutBox"><div class="label">품절 옵션</div><div class="v" id="invOut"></div></div>
+          <div class="mini"><div class="label">장기 재고 상품</div><div class="v" id="invLong"></div></div>
+          <div class="mini"><div class="label">재고 소진율</div><div class="v" id="invSell"></div></div>
+        </div>
+        <div class="statuses" id="statuses"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>재고 소진 예상</h2><span class="sub">소진이 빠른 순</span></div>
+        <p class="note">소진 예상일 = 기준일 + 판매 가능 재고 ÷ 최근 7일 하루 평균 판매. 다음 입고 전에 소진되면 표시합니다.</p>
+        <div class="table-box" style="max-height: 400px">
+          <table>
+            <thead><tr><th>상품</th><th class="num">판매 가능</th><th class="num">7일 판매</th><th>소진 예상일</th><th>다음 입고</th><th>입고 전 소진</th><th>상태</th></tr></thead>
+            <tbody id="outBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ⑤ 상품 관리 -->
+    <div class="section-title" id="secProducts"><span class="no">5</span><h2>상품 관리</h2><span class="badge any-badge">샘플 포함</span></div>
+    <section class="card" style="margin-top: 16px">
+      <div class="card-head"><h2>상품별 생산·재고</h2><span class="sub" id="mdCount"></span></div>
+      <div class="tools">
+        <input type="search" id="search" placeholder="상품명·품번·거래처 검색" aria-label="상품 검색">
+        <select id="seasonFilter" aria-label="시즌"></select>
+        <select id="stFilter" aria-label="재고 상태">
+          <option value="">재고 상태 전체</option><option>위험</option><option>주의</option><option>정상</option>
+        </select>
+        <button id="csvBtn">CSV 다운로드</button>
+        <button id="xlsxBtn">엑셀 다운로드</button>
+      </div>
+      <p class="note" style="margin: 4px 0 8px">행을 누르면 상품 상세가 열립니다. 머리글을 누르면 정렬됩니다. 입고율 = 입고 수량 ÷ 입고 완료된 발주의 발주 수량.</p>
+      <div class="table-box">
+        <table>
+          <thead><tr id="mdHead">
+            <th data-k="name"><button class="sort">상품명</button></th>
+            <th data-k="code"><button class="sort">품번</button></th>
+            <th data-k="season"><button class="sort">시즌</button></th>
+            <th data-k="vendor"><button class="sort">생산 거래처</button></th>
+            <th class="num" data-k="orderQty"><button class="sort">발주 수량</button></th>
+            <th class="num" data-k="receivedQty"><button class="sort">입고 수량</button></th>
+            <th class="num" data-k="inRate"><button class="sort">입고율</button></th>
+            <th class="num" data-k="stock"><button class="sort">현재 재고</button></th>
+            <th class="num" data-k="sold"><button class="sort">누적 판매</button></th>
+            <th class="num" data-k="incoming"><button class="sort">입고 예정</button></th>
+            <th data-k="prodDue"><button class="sort">생산 완료 예정일</button></th>
+            <th data-k="nextDate"><button class="sort">입고 예정일</button></th>
+            <th data-k="outDate"><button class="sort">소진 예상일</button></th>
+            <th data-k="stage"><button class="sort">생산 진행 상태</button></th>
+            <th data-k="status"><button class="sort">재고 상태</button></th>
+          </tr></thead>
+          <tbody id="mdBody" class="pick"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card hidden" id="detail" style="margin-top: 16px">
+      <div class="card-head"><h2 id="dTitle"></h2><button id="dClose">닫기</button></div>
+      <div class="minis" id="dMinis"></div>
+      <div class="charts half" style="margin-top: 0">
+        <div class="table-box">
+          <table>
+            <thead><tr><th>컬러</th><th>사이즈</th><th class="num">현재 재고</th><th class="num">판매 가능</th><th class="num">7일 판매</th><th>상태</th></tr></thead>
+            <tbody id="dOpts"></tbody>
+          </table>
+        </div>
+        <div class="table-box">
+          <table>
+            <thead><tr><th>발주번호</th><th>거래처</th><th class="num">발주</th><th class="num">입고</th><th>생산 단계</th><th>납기일</th><th>상태</th></tr></thead>
+            <tbody id="dPos"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ⑥ 컬러·사이즈 -->
+    <div class="section-title" id="secOpt"><span class="no">6</span><h2>컬러·사이즈 분석</h2><span class="badge stock-badge">샘플</span></div>
+    <p class="section-note" id="optNote">옵션별 생산·판매·재고는 옵션 재고 파일 기준입니다. 아래 판매 현황의 매출 파일 수량과는 따로 집계합니다.</p>
+
+    <section class="charts half">
+      <div class="card">
+        <div class="card-head"><h2>컬러별 생산·판매·재고</h2></div>
+        <div class="legend">
+          <span><i class="sq" style="background:var(--compare)"></i>생산</span>
+          <span><i class="sq" style="background:var(--series-1)"></i>판매</span>
+          <span><i class="sq" style="background:var(--c4)"></i>현재 재고</span>
+        </div>
+        <div class="chart-box"><canvas id="colorChart" aria-label="컬러별 생산·판매·재고 그래프" role="img"></canvas></div>
+        <details><summary>표로 보기</summary><table id="colorTable"></table></details>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>사이즈별 생산·판매·재고</h2></div>
+        <div class="table-box">
+          <table>
+            <thead><tr><th>사이즈</th><th class="num">생산</th><th class="num">판매</th><th class="num">재고</th><th class="num">판매율</th><th class="num">품절</th><th class="num">안전재고 미달</th></tr></thead>
+            <tbody id="sizeBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top: 16px">
+      <div class="card-head"><h2>옵션별 판매율과 리오더</h2><span class="sub" id="optCount"></span></div>
+      <div class="tools">
+        <label><input type="checkbox" id="reorderOnly"> 리오더 필요 옵션만 보기</label>
+      </div>
+      <div class="table-box">
+        <table>
+          <thead><tr><th>상품</th><th>컬러</th><th>사이즈</th><th class="num">생산</th><th class="num">판매</th><th class="num">현재 재고</th><th class="num">판매율</th><th>소진 예상</th><th>재고 상태</th><th>리오더</th></tr></thead>
+          <tbody id="optBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top: 16px">
+      <div class="card-head"><h2>상품별 판매율과 반품률</h2><span class="sub">판매율 높은 순</span></div>
+      <div class="table-box" style="max-height: 360px">
+        <table>
+          <thead><tr><th>상품</th><th class="num">누적 판매</th><th class="num">현재 재고</th><th class="num">판매율</th><th class="num">반품</th><th class="num">반품률</th></tr></thead>
+          <tbody id="rateBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ⑦ 판매 -->
+    <div class="section-title" id="secSales"><span class="no">7</span><h2>판매 현황</h2></div>
+    <p class="section-note">매출 파일 기준. 위의 기간 선택은 이 판매 현황에만 적용됩니다.</p>
+
+    <section class="kpis sales">
+      <div class="card kpi"><div class="label">순매출</div><div class="value" id="kSales"></div><div class="delta" id="dSales"></div></div>
+      <div class="card kpi"><div class="label">주문 수</div><div class="value" id="kOrders"></div><div class="delta" id="dOrders"></div></div>
+      <div class="card kpi"><div class="label">객단가</div><div class="value" id="kAov"></div><div class="delta" id="dAov"></div></div>
+      <div class="card kpi"><div class="label">반품률</div><div class="value" id="kRet"></div><div class="delta" id="dRet"></div></div>
+    </section>
+
+    <section class="charts single">
+      <div class="card">
+        <div class="card-head">
+          <h2>매출 추이</h2>
+          <div class="seg" id="grainSeg" role="group" aria-label="단위">
+            <button data-g="day">일</button><button data-g="week">주</button><button data-g="month">월</button>
+          </div>
+        </div>
+        <div class="legend">
+          <span><i style="background:var(--series-1)"></i>선택 기간</span>
+          <span id="compareKey"><i style="background:var(--compare)"></i>직전 같은 기간</span>
+        </div>
+        <div class="chart-box"><canvas id="trendChart" aria-label="매출 추이 그래프" role="img"></canvas></div>
+        <details><summary>표로 보기</summary><table id="trendTable"></table></details>
+      </div>
+    </section>
+
+    <section class="charts" id="midRow">
+      <div class="card">
+        <div class="card-head"><h2>상품별 매출 TOP 10</h2></div>
+        <div class="chart-box"><canvas id="topChart" aria-label="매출 상위 상품 그래프" role="img"></canvas></div>
+        <details><summary>표로 보기</summary><table id="topTable"></table></details>
+      </div>
+      <div class="card" id="catCard">
+        <div class="card-head"><h2>카테고리별 매출 비중</h2></div>
+        <div class="donut-wrap">
+          <div class="donut-box">
+            <canvas id="catChart" aria-label="카테고리별 매출 비중 도넛 그래프" role="img"></canvas>
+            <div class="donut-center"><span class="t">순매출 합계</span><span class="v" id="catTotal"></span></div>
+          </div>
+          <ul class="cat-legend" id="catLegend"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="productCard" style="margin-top: 16px">
+      <div class="card-head"><h2>상품별 판매 실적</h2><span class="sub">선택한 기간·카테고리 기준 · 순매출 높은 순</span></div>
+      <div class="table-box">
+        <table>
+          <thead><tr><th>상품</th><th>카테고리</th><th class="num">수량</th><th class="num">순매출</th><th class="num">비중</th><th class="num">주문 수</th><th class="num">반품</th></tr></thead>
+          <tbody id="productBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top: 56px">
+      <div class="card-head"><h2>지표 정의</h2></div>
+      <div class="defs-title">생산·재고·품질 (발주·재고·원부자재·검품 파일, 없으면 샘플)</div>
+      <ul class="defs" id="ruleDefs"></ul>
+      <div class="defs-title">판매 (매출 파일)</div>
+      <ul class="defs">
+        <li>순매출: 반품여부가 Y인 행을 뺀 금액 합계. 반품 열이 없으면 전체 금액입니다.</li>
+        <li>주문 수: 주문번호 열이 있으면 서로 다른 주문번호 수, 없으면 한 행을 한 주문으로 셉니다. 객단가 = 순매출 ÷ 주문 수.</li>
+        <li>반품률: 반품된 주문 ÷ 전체 주문. 증감은 바로 앞의 같은 길이 기간과 비교합니다.</li>
+        <li>판매 기간의 기준일은 오늘이 아니라 매출 데이터의 마지막 날짜입니다.</li>
+      </ul>
+    </section>
+
+    <details class="mapping card" id="mapping">
+      <summary>매출 파일 열 설정 (숫자가 이상하면 여기서 열을 바꿔 주세요)</summary>
+      <div class="row">
+        <label>날짜 <select data-role="date"></select></label>
+        <label>금액 <select data-role="amount"></select></label>
+        <label>주문번호 <select data-role="order"></select></label>
+        <label>상품 <select data-role="dim"></select></label>
+        <label>카테고리 <select data-role="cat"></select></label>
+        <label>수량 <select data-role="qty"></select></label>
+        <label>반품여부 <select data-role="ret"></select></label>
+      </div>
+    </details>
+  </main>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const DAY = 86400000;
+  const PATTERNS = {
+    date: /날짜|일자|일시|주문일|결제일|date|day|time/i,
+    amount: /매출|금액|결제액|합계|판매액|amount|sales|revenue|total|price/i,
+    order: /주문번호|주문id|주문 번호|order|invoice|거래번호/i,
+    dim: /상품|품목|제품|메뉴|product|item|menu/i,
+    cat: /카테고리|분류|채널|category|channel/i,
+    qty: /수량|qty|quantity/i,
+    ret: /반품|환불|return|refund/i,
+    target: /목표|target|goal/i,
+    cost: /원가|단가|cost/i,
+  };
+  // 찾는 순서: 목표·원가 열이 '매출'·'금액' 패턴에 먼저 잡히지 않게 앞에서 걸러냄
+  const GUESS_ORDER = ['order', 'date', 'target', 'cost', 'ret', 'qty', 'amount', 'dim', 'cat'];
+  const CAT_MAX = 8; // 색 8개를 넘는 카테고리는 '기타'로 묶음
+  // 생산 공정: 발주 → 원부자재 준비 → 생산(재단·봉제) → 검품 → 생산 완료 → 입고 완료
+  const STAGES = ['발주 확정', '원부자재 준비', '재단', '봉제', '검품', '생산 완료', '입고 완료'];
+  // 예전 양식·다른 표기의 단계 이름
+  const STAGE_ALIAS = { '원단 준비': '원부자재 준비', '자재 준비': '원부자재 준비', '원부자재': '원부자재 준비', '완성 및 검품': '검품', '완성': '검품', '발주': '발주 확정', '입고': '입고 완료' };
+  const STAGE_KEY = new Map([...STAGES.map((s) => [s, s]), ...Object.entries(STAGE_ALIAS)].map(([k, v]) => [k.replace(/\s/g, ''), v]));
+  // 재고·생산·품질 판단 기준
+  const RULES = {
+    riskDays: 14, warnDays: 30, longDays: 30, longCoverDays: 120, surgeRatio: 1.5, surgeMin: 10, soonDays: 7, reorderWeeks: 4,
+    onTimeGoal: 0.9, defectWarn: 0.03, defectRisk: 0.05,
+  };
+  const KINDS = ['prod', 'stock', 'mat', 'qc'];
+  const KIND_LABEL = { prod: '발주·생산', stock: '옵션 재고', mat: '원부자재', qc: '검품' };
+  // 알림 종류: 이 순서로 칩을 보여줌 (중요한 것 먼저)
+  const ALERT_TYPES = ['납기 지연', '자재 부족', '품질 문제', '재고 부족', '안전재고 미달', '추가 발주 필요', '생산 지연', '입고 임박', '판매 급증', '장기 재고'];
+  const ALERT_SHOW = 6;
+  const TONE = {
+    위험: 't-bad', 지연: 't-bad', 품절: 't-bad', '자재 부족': 't-bad', 불합격: 't-bad',
+    주의: 't-warn', '안전재고 미달': 't-warn', 임박: 't-warn', '장기 재고': 't-warn', '입고 대기': 't-warn', 리오더: 't-warn',
+    정상: 't-ok', '입고 완료': 't-ok', 합격: 't-ok',
+  };
+
+  const state = {
+    rows: [], headers: [], map: {}, records: [], period: 'all', grain: 'week', from: null, to: null, cat: '',
+    salesName: '', files: {}, ops: null,
+    q: '', st: '', season: '', sort: 'status', dir: 1, sel: null,
+    alertType: '', alertAll: false, reorderOnly: false,
+  };
+  let trendChart, topChart, catChart, colorChart, defectChart;
+
+  // ---------- 파일 읽기 ----------
+  // 시트마다 열 이름을 보고 매출 / 발주·생산 / 옵션 재고 / 원부자재 / 검품을 구분
+  function kindOf(headers) {
+    const h = headers.map((x) => String(x).replace(/\s/g, ''));
+    const has = (re) => h.some((x) => re.test(x));
+    if (has(/자재코드|자재명|원부자재/)) return 'mat';
+    if (has(/검품수량|불량수량|불량유형/)) return 'qc';
+    if (has(/발주번호|생산단계/)) return 'prod';
+    if (has(/컬러|색상|사이즈|현재재고|판매가능재고/)) return 'stock';
+    return 'sales';
+  }
+
+  function readFiles(files) {
+    let pending = files.length;
+    for (const file of files) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+          for (const sn of wb.SheetNames) {
+            const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { defval: null, raw: true });
+            if (!rows.length) continue;
+            const name = wb.SheetNames.length > 1 ? `${file.name} (${sn})` : file.name;
+            const kind = kindOf(Object.keys(rows[0]));
+            if (kind === 'sales') { state.rows = rows; state.salesName = name; state.headers = Object.keys(rows[0]); state.map = guessMapping(state.headers); }
+            else state.files[kind] = { rows, name };
+          }
+        } catch (err) {
+          showError(`${file.name}을(를) 읽지 못했습니다. 엑셀(.xlsx) 또는 CSV인지 확인해 주세요.`);
+        }
+        if (--pending === 0) afterLoad();
+      };
+      reader.readAsArrayBuffer(file);
+    }
+  }
+
+  function afterLoad() {
+    if (!state.rows.length) {
+      if (KINDS.some((k) => state.files[k])) showError('생산·재고 파일은 읽었습니다. 이제 매출 파일을 넣어 주세요.');
+      return;
+    }
+    showDash();
+    buildMappingUI();
+    if (!state.map.date || !state.map.amount) {
+      $('mapping').open = true;
+      return showError('날짜·금액 열을 찾지 못했습니다. 아래 열 설정에서 골라 주세요.');
+    }
+    rebuild();
+  }
+
+  function guessMapping(headers) {
+    const used = new Set();
+    const map = {};
+    for (const role of GUESS_ORDER) {
+      const h = headers.find((h) => !used.has(h) && PATTERNS[role].test(String(h)));
+      map[role] = h || '';
+      if (h) used.add(h);
+    }
+    return map;
+  }
+
+  function parseDate(v) {
+    if (v instanceof Date) return new Date(v.getFullYear(), v.getMonth(), v.getDate());
+    if (typeof v === 'number') {
+      const d = XLSX.SSF.parse_date_code(v);
+      return d ? new Date(d.y, d.m - 1, d.d) : null;
+    }
+    if (typeof v === 'string') {
+      const m = v.trim().match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/) || v.trim().match(/^(\d{4})(\d{2})(\d{2})/);
+      if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+    }
+    return null;
+  }
+
+  function parseAmount(v) {
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string') {
+      const n = parseFloat(v.replace(/[^\d.\-]/g, ''));
+      return isNaN(n) ? null : n;
+    }
+    return null;
+  }
+  const isReturn = (v) => /^(y|yes|예|o|true|1|반품)$/i.test(String(v ?? '').trim());
+
+  function rebuild() {
+    const { date, amount, order, dim, cat, qty, ret } = state.map;
+    state.records = [];
+    for (const r of state.rows) {
+      const d = parseDate(r[date]);
+      const a = parseAmount(r[amount]);
+      if (!d || a === null) continue;
+      state.records.push({
+        t: d.getTime(),
+        amount: a,
+        order: order ? r[order] : null,
+        dim: dim ? String(r[dim] ?? '(없음)') : '(전체)',
+        cat: cat ? String(r[cat] ?? '(없음)') : null,
+        qty: qty ? (parseAmount(r[qty]) ?? 1) : 1,
+        ret: ret ? isReturn(r[ret]) : false,
+      });
+    }
+    // 카테고리 색은 전체 기간 매출 순위로 고정: 기간을 바꿔도 같은 카테고리는 같은 색
+    const catSums = new Map();
+    if (cat) for (const r of state.records) if (!r.ret) catSums.set(r.cat, (catSums.get(r.cat) || 0) + r.amount);
+    const ranked = [...catSums.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+    state.catRank = ranked;
+    state.catOrder = ranked.length > CAT_MAX ? [...ranked.slice(0, CAT_MAX - 1), '기타'] : ranked;
+    if (!state.records.length) return showError('날짜·금액을 읽을 수 있는 행이 없습니다. 열 설정을 확인해 주세요.');
+    showError('');
+    state.minT = Math.min(...state.records.map((r) => r.t));
+    state.maxT = Math.max(...state.records.map((r) => r.t));
+    $('fromDate').value = toISO(state.minT);
+    $('toDate').value = toISO(state.maxT);
+    if (state.period === 'all') state.grain = daysBetween(state.minT, state.maxT) > 120 ? 'month' : 'week';
+    buildCatSelect();
+    buildOps();
+    buildSeasonSelect();
+    syncButtons();
+    render();
+  }
+
+  // ---------- 기간 ----------
+  // 기준일은 "오늘"이 아니라 데이터의 마지막 날짜 (과거 파일도 바로 볼 수 있게)
+  function currentRange() {
+    const end = state.maxT;
+    const p = state.period;
+    if (p === 'all') return [state.minT, end];
+    if (p === 'mtd') { const d = new Date(end); return [new Date(d.getFullYear(), d.getMonth(), 1).getTime(), end]; }
+    if (p === 'custom') {
+      const f = parseDate($('fromDate').value), t = parseDate($('toDate').value);
+      if (f && t && f <= t) return [f.getTime(), t.getTime()];
+      return [state.minT, end];
+    }
+    return [addDays(end, -(+p - 1)), end];
+  }
+
+  function addDays(t, n) { const d = new Date(t); d.setDate(d.getDate() + n); return d.getTime(); }
+  function daysBetween(a, b) { return Math.round((b - a) / DAY) + 1; }
+  function toISO(t) { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function fmtDate(t) { const d = new Date(t); return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}`; }
+  const dateOr = (t) => t == null ? '—' : toISO(t);
+
+  // ---------- 집계 ----------
+  const inCat = (r) => !state.cat || r.cat === state.cat || r.category === state.cat;
+  // 원부자재·알림은 여러 카테고리에 걸칠 수 있음 (공용 부자재 등)
+  const inCats = (r) => !state.cat || !r.cats.length || r.cats.includes(state.cat);
+  const sum = (rs, k) => rs.reduce((s, r) => s + (r[k] || 0), 0);
+
+  function summarize(recs) {
+    const kept = recs.filter((r) => !r.ret);
+    const sales = kept.reduce((s, r) => s + r.amount, 0);
+    const count = (rs) => state.map.order ? new Set(rs.map((r) => r.order)).size : rs.length;
+    const orders = count(kept), all = count(recs);
+    return { sales, orders, aov: orders ? sales / orders : 0, retRate: all ? (all - orders) / all : 0 };
+  }
+
+  function bucketKey(t) {
+    const d = new Date(t);
+    if (state.grain === 'month') return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+    if (state.grain === 'week') { const dow = (d.getDay() + 6) % 7; return addDays(t, -dow); }
+    return t;
+  }
+
+  function bucketLabel(t) {
+    const d = new Date(t);
+    if (state.grain === 'month') return `${d.getFullYear()}.${pad(d.getMonth() + 1)}`;
+    if (state.grain === 'week') return `${d.getMonth() + 1}/${d.getDate()} 주`;
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
+  // ---------- 그리기 ----------
+  function render() {
+    const [from, to] = currentRange();
+    const len = daysBetween(from, to);
+    const prevFrom = addDays(from, -len), prevTo = addDays(from, -1);
+    const inRange = state.records.filter((r) => r.t >= from && r.t <= to);
+    const cur = inRange.filter(inCat);
+    const prev = state.records.filter((r) => r.t >= prevFrom && r.t <= prevTo && inCat(r));
+    const hasPrev = prevTo >= state.minT;
+
+    $('rangeLabel').textContent = `판매 기간 ${fmtDate(from)} ~ ${fmtDate(to)} (${len}일)` +
+      (hasPrev ? ` · 비교: ${fmtDate(prevFrom)} ~ ${fmtDate(prevTo)}` : '');
+
+    const c = summarize(cur), p = summarize(prev);
+    $('kSales').textContent = won(c.sales);
+    $('kOrders').textContent = c.orders.toLocaleString('ko-KR') + '건';
+    $('kAov').textContent = won(c.aov);
+    setDelta('dSales', c.sales, p.sales, hasPrev);
+    setDelta('dOrders', c.orders, p.orders, hasPrev);
+    setDelta('dAov', c.aov, p.aov, hasPrev);
+    if (state.map.ret) {
+      $('kRet').textContent = (c.retRate * 100).toFixed(1) + '%';
+      if (!hasPrev || !p.orders) $('dRet').textContent = '비교할 직전 기간 데이터 없음';
+      else {
+        const d = (c.retRate - p.retRate) * 100;
+        $('dRet').innerHTML = `<b class="${d <= 0 ? 'up' : 'down'}">${d > 0 ? '▲' : d < 0 ? '▼' : ''} ${Math.abs(d).toFixed(1)}%p</b> 직전 기간 대비`;
+      }
+    } else { $('kRet').textContent = '—'; $('dRet').textContent = '반품여부 열이 없습니다'; }
+
+    renderTrend(cur, prev, from, to, len, hasPrev);
+    renderTop(cur);
+    renderCategory(inRange);
+    renderProducts(cur);
+    renderOps();
+  }
+
+  function renderCategory(inRange) {
+    const show = !!state.map.cat;
+    $('catCard').classList.toggle('hidden', !show);
+    $('midRow').classList.toggle('single', !show);
+    if (catChart) { catChart.destroy(); catChart = null; }
+    if (!show) return;
+
+    const css = getComputedStyle(document.documentElement);
+    const v = (n) => css.getPropertyValue(n).trim();
+    const order = state.catOrder;
+    const bucket = (c) => order.includes(c) ? c : '기타';
+    const sums = new Map(order.map((c) => [c, 0]));
+    for (const r of inRange) if (!r.ret) sums.set(bucket(r.cat), sums.get(bucket(r.cat)) + r.amount);
+    // 카테고리를 고르면 그 카테고리만 색으로, 나머지는 회색
+    const color = (c, i) => state.cat && c !== state.cat ? v('--compare') : v(`--c${i + 1}`);
+    const rows = order.map((c, i) => ({ name: c, sales: sums.get(c), color: color(c, i) })).filter((r) => r.sales > 0);
+    const total = rows.reduce((s, r) => s + r.sales, 0);
+
+    $('catTotal').textContent = won(total);
+    $('catLegend').innerHTML = rows.map((r) =>
+      `<li><span class="dot" style="background:${r.color}"></span><span class="name">${escapeHtml(r.name)}</span>` +
+      `<span class="val">${(r.sales / total * 100).toFixed(1)}%</span><span class="val">${won(r.sales)}</span></li>`).join('');
+
+    catChart = new Chart($('catChart'), {
+      type: 'doughnut',
+      data: { labels: rows.map((r) => r.name), datasets: [{ data: rows.map((r) => r.sales), backgroundColor: rows.map((r) => r.color),
+        hoverBackgroundColor: rows.map((r) => r.color), borderColor: v('--surface'), borderWidth: 2, hoverOffset: 4 }] },
+      options: baseOptions(v, {
+        cutout: '62%',
+        plugins: { tooltip: { callbacks: {
+          label: (ctx) => ` ${Math.round(ctx.raw).toLocaleString('ko-KR')}원 (${(ctx.raw / total * 100).toFixed(1)}%)`,
+        } } },
+      }),
+    });
+  }
+
+  function renderProducts(cur) {
+    const show = !!state.map.dim;
+    $('productCard').classList.toggle('hidden', !show);
+    if (!show) return;
+    const by = new Map();
+    for (const r of cur) {
+      const p = by.get(r.dim) || { cat: r.cat, sales: 0, qty: 0, orders: new Set(), rows: 0, ret: 0 };
+      if (r.ret) p.ret++;
+      else {
+        p.sales += r.amount;
+        p.qty += r.qty;
+        p.rows++;
+        if (state.map.order) p.orders.add(r.order);
+      }
+      by.set(r.dim, p);
+    }
+    const total = cur.filter((r) => !r.ret).reduce((s, r) => s + r.amount, 0);
+    const rows = [...by.entries()].map(([name, p]) => ({ name, cat: p.cat, sales: p.sales, qty: p.qty, ret: p.ret, orders: state.map.order ? p.orders.size : p.rows }))
+      .sort((a, b) => b.sales - a.sales);
+    const max = rows.length ? rows[0].sales || 1 : 1;
+    $('productBody').innerHTML = rows.map((r) =>
+      `<tr><td class="strong">${escapeHtml(r.name)}</td><td>${escapeHtml(r.cat ?? '—')}</td><td class="num">${n(r.qty)}</td>` +
+      `<td class="num">${barCell(r.sales / max, n(r.sales) + '원')}</td>` +
+      `<td class="num">${total ? (r.sales / total * 100).toFixed(1) : 0}%</td>` +
+      `<td class="num">${n(r.orders)}</td><td class="num">${n(r.ret)}건</td></tr>`).join('');
+  }
+
+  function setDelta(id, cur, prev, hasPrev) {
+    const el = $(id);
+    if (!hasPrev || !prev) { el.textContent = '비교할 직전 기간 데이터 없음'; return; }
+    const pct = (cur - prev) / prev * 100;
+    const up = pct >= 0;
+    el.innerHTML = `<b class="${up ? 'up' : 'down'}">${up ? '▲' : '▼'} ${Math.abs(pct).toFixed(1)}%</b> 직전 기간 대비`;
+  }
+
+  function won(v) {
+    const a = Math.abs(v);
+    if (a >= 1e8) return (v / 1e8).toFixed(a >= 1e10 ? 0 : 1).replace(/\.0$/, '') + '억원';
+    if (a >= 1e4) return Math.round(v / 1e4).toLocaleString('ko-KR') + '만원';
+    return Math.round(v).toLocaleString('ko-KR') + '원';
+  }
+  function axisWon(v) {
+    const a = Math.abs(v);
+    if (a >= 1e8) return (v / 1e8).toLocaleString('ko-KR', { maximumFractionDigits: 1 }) + '억';
+    if (a >= 1e4) return (v / 1e4).toLocaleString('ko-KR', { maximumFractionDigits: 0 }) + '만';
+    return v.toLocaleString('ko-KR');
+  }
+  const n = (v) => Math.round(v || 0).toLocaleString('ko-KR');
+  const pct1 = (v) => (v * 100).toFixed(1) + '%';
+  const pctOr = (v) => v == null ? '—' : pct1(v);
+  const chip = (s, tone) => `<span class="chip ${TONE[tone ?? s] || ''}">${escapeHtml(s)}</span>`;
+  const barCell = (ratio, text, color) => `<div class="barcell"><span class="track"><span class="bar" style="width:${(Math.max(0, Math.min(1, ratio)) * 100).toFixed(1)}%${color ? ';background:' + color : ''}"></span></span>${text}</div>`;
+  const rowTone = (level) => level === '위험' ? 'r-bad' : level === '주의' ? 'r-warn' : '';
+  const diffText = (d) => d === 0 ? '0' : `<span class="${d < 0 ? 't-bad' : 't-ok'}">${d > 0 ? '+' : '−'}${n(Math.abs(d))}</span>`;
+  const defectTone = (r) => r == null ? '' : r >= RULES.defectRisk ? 't-bad' : r >= RULES.defectWarn ? 't-warn' : '';
+
+  function renderTrend(cur, prev, from, to, len, hasPrev) {
+    // 칸 목록: 선택 기간의 모든 날짜를 단위별로 묶음 (매출 0인 날도 표시)
+    const keys = [];
+    for (let t = from; t <= to; t = addDays(t, 1)) {
+      const k = bucketKey(t);
+      if (keys[keys.length - 1] !== k) keys.push(k);
+    }
+    const curMap = new Map(keys.map((k) => [k, 0]));
+    const prevMap = new Map(keys.map((k) => [k, 0]));
+    for (const r of cur) if (!r.ret) curMap.set(bucketKey(r.t), (curMap.get(bucketKey(r.t)) || 0) + r.amount);
+    // 직전 기간은 기간 길이만큼 앞으로 옮겨서 같은 칸에 겹침
+    for (const r of prev) {
+      if (r.ret) continue;
+      const k = bucketKey(addDays(r.t, len));
+      if (prevMap.has(k)) prevMap.set(k, prevMap.get(k) + r.amount);
+    }
+    $('compareKey').classList.toggle('hidden', !hasPrev);
+    const labels = keys.map(bucketLabel);
+    const curData = keys.map((k) => curMap.get(k));
+    const prevData = keys.map((k) => prevMap.get(k));
+
+    const css = getComputedStyle(document.documentElement);
+    const v = (n) => css.getPropertyValue(n).trim();
+    const datasets = [{
+      label: '선택 기간', data: curData, borderColor: v('--series-1'), backgroundColor: v('--accent-wash'),
+      fill: true, borderWidth: 2, tension: 0.25, pointRadius: keys.length === 1 ? 4 : 0,
+      pointHoverRadius: 5, pointHoverBorderWidth: 2, pointHoverBorderColor: v('--surface'), pointBackgroundColor: v('--series-1'),
+    }];
+    if (hasPrev) datasets.push({
+      label: '직전 같은 기간', data: prevData, borderColor: v('--compare'), borderWidth: 2, tension: 0.25,
+      pointRadius: 0, pointHoverRadius: 5, pointHoverBorderWidth: 2, pointHoverBorderColor: v('--surface'), pointBackgroundColor: v('--compare'),
+    });
+
+    if (trendChart) trendChart.destroy();
+    trendChart = new Chart($('trendChart'), {
+      type: 'line',
+      data: { labels, datasets },
+      options: baseOptions(v, {
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { grid: { display: false }, border: { color: v('--axis') }, ticks: { color: v('--text-muted'), maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
+          y: { beginAtZero: true, grid: { color: v('--grid') }, border: { display: false }, ticks: { color: v('--text-muted'), callback: axisWon, maxTicksLimit: 5 } },
+        },
+      }),
+    });
+
+    $('trendTable').innerHTML = `<tr><th>기간</th><th class="num">순매출</th>${hasPrev ? '<th class="num">직전 기간</th>' : ''}</tr>` +
+      keys.map((k, i) => `<tr><td>${labels[i]}</td><td class="num">${n(curData[i])}</td>${hasPrev ? `<td class="num">${n(prevData[i])}</td>` : ''}</tr>`).join('');
+  }
+
+  function renderTop(cur) {
+    const css = getComputedStyle(document.documentElement);
+    const v = (n) => css.getPropertyValue(n).trim();
+    const sums = new Map();
+    for (const r of cur) if (!r.ret) sums.set(r.dim, (sums.get(r.dim) || 0) + r.amount);
+    const top = [...sums.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const total = [...sums.values()].reduce((s, x) => s + x, 0);
+    if (topChart) topChart.destroy();
+    topChart = horizontalBar($('topChart'), top, v, (x) => ` ${n(x)}원 (${total ? (x / total * 100).toFixed(1) : 0}%)`, axisWon);
+    $('topTable').innerHTML = '<tr><th>상품</th><th class="num">순매출</th><th class="num">비중</th></tr>' +
+      top.map(([k, s]) => `<tr><td>${escapeHtml(k)}</td><td class="num">${n(s)}</td><td class="num">${total ? (s / total * 100).toFixed(1) : 0}%</td></tr>`).join('');
+  }
+
+  function horizontalBar(canvas, pairs, v, tipLabel, tick, color = '--series-1') {
+    return new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: pairs.map(([k]) => k.length > 14 ? k.slice(0, 13) + '…' : k),
+        datasets: [{ data: pairs.map(([, s]) => s), backgroundColor: v(color), hoverBackgroundColor: v(color),
+          maxBarThickness: 20, borderRadius: { topRight: 4, bottomRight: 4 }, borderSkipped: 'start' }],
+      },
+      options: baseOptions(v, {
+        indexAxis: 'y',
+        scales: {
+          x: { beginAtZero: true, grid: { color: v('--grid') }, border: { display: false }, ticks: { color: v('--text-muted'), callback: tick, maxTicksLimit: 4 } },
+          y: { grid: { display: false }, border: { color: v('--axis') }, ticks: { color: v('--text-secondary'), font: { size: 13 } } },
+        },
+        plugins: { tooltip: { callbacks: { title: (items) => pairs[items[0].dataIndex][0], label: (ctx) => tipLabel(ctx.raw) } } },
+      }),
+    });
+  }
+
+  // 묶음 막대: sets = [[이름, 값 배열, 색 토큰], ...]
+  function groupedBar(canvas, labels, sets, v, unit) {
+    return new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: sets.map(([label, data, color]) => ({ label, data, backgroundColor: v(color), hoverBackgroundColor: v(color),
+          maxBarThickness: 18, borderRadius: { topLeft: 3, topRight: 3 }, borderSkipped: 'start' })),
+      },
+      options: baseOptions(v, {
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { grid: { display: false }, border: { color: v('--axis') }, ticks: { color: v('--text-secondary'), font: { size: 13 } } },
+          y: { beginAtZero: true, grid: { color: v('--grid') }, border: { display: false }, ticks: { color: v('--text-muted'), maxTicksLimit: 5 } },
+        },
+        plugins: { tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${n(ctx.raw)}${unit}` } } },
+      }),
+    });
+  }
+
+  function baseOptions(v, extra) {
+    const opts = {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: v('--surface'), titleColor: v('--text-primary'), bodyColor: v('--text-secondary'),
+          borderColor: v('--border'), borderWidth: 1, padding: 10, boxPadding: 4, usePointStyle: true,
+          callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${Math.round(ctx.raw).toLocaleString('ko-KR')}원` },
+        },
+      },
+    };
+    const merged = { ...opts, ...extra };
+    if (extra.plugins) merged.plugins = { ...opts.plugins, tooltip: { ...opts.plugins.tooltip, ...extra.plugins.tooltip } };
+    return merged;
+  }
+
+  function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  // ---------- 생산·재고 데이터 ----------
+  // 열 이름은 양식 기준, 비슷한 이름도 받아줌
+  const col = (headers, ...names) => headers.find((h) => names.some((x) => String(h).replace(/\s/g, '') === x)) || '';
+  const normStage = (v) => { const s = String(v ?? '').trim(); return STAGE_KEY.get(s.replace(/\s/g, '')) || s; };
+
+  function buildOps() {
+    // 없는 파일은 매출 파일의 상품으로 샘플을 만들어 같은 경로로 읽음
+    const sample = KINDS.some((k) => !state.files[k]) ? makeOpsSample(state.maxT) : null;
+    const rowsOf = (k) => state.files[k] ? state.files[k].rows : sample[k];
+    const prodRows = rowsOf('prod'), stockRows = rowsOf('stock'), matRows = rowsOf('mat'), qcRows = rowsOf('qc');
+    const catOf = new Map(state.records.map((r) => [r.dim, r.cat]));
+    const num = (v) => parseAmount(v) ?? 0;
+    const str = (v) => v == null ? '' : String(v).trim();
+    const time = (v) => { const d = parseDate(v); return d ? d.getTime() : null; };
+
+    const ph = Object.keys(prodRows[0] || {});
+    const pc = {
+      po: col(ph, '발주번호'), code: col(ph, '품번', '상품코드'), name: col(ph, '상품명', '상품'), cat: col(ph, '카테고리'),
+      season: col(ph, '시즌'), vendor: col(ph, '거래처', '생산거래처', '협력사', '공장'),
+      ordered: col(ph, '발주일'), qty: col(ph, '발주수량', '수량'), unit: col(ph, '발주단가', '원가', '단가'),
+      stage: col(ph, '생산단계', '진행단계'), prodDue: col(ph, '생산완료예정일', '완료예정일'),
+      due: col(ph, '납기일', '입고예정일'), inDate: col(ph, '입고일', '입고완료일'), inQty: col(ph, '입고수량', '실입고수량'),
+    };
+    const prod = prodRows.map((r) => {
+      const name = str(r[pc.name]) || str(r[pc.code]) || '(없음)';
+      const qty = num(r[pc.qty]);
+      const stage = normStage(r[pc.stage]);
+      const inDate = time(r[pc.inDate]);
+      const received = inDate != null || stage === '입고 완료';
+      return {
+        po: str(r[pc.po]), code: str(r[pc.code]) || name, name, category: pc.cat ? str(r[pc.cat]) : (catOf.get(name) ?? ''),
+        season: str(r[pc.season]), vendor: str(r[pc.vendor]) || '(미지정)',
+        ordered: time(r[pc.ordered]), qty, amount: qty * num(r[pc.unit]),
+        stage: received ? '입고 완료' : stage, prodDue: time(r[pc.prodDue]), due: time(r[pc.due]), inDate,
+        received, produced: received || stage === '생산 완료',
+        // 입고수량 열이 비어 있으면 발주 수량만큼 들어온 것으로 봄
+        inQty: received ? (pc.inQty && str(r[pc.inQty]) !== '' ? num(r[pc.inQty]) : qty) : 0,
+      };
+    });
+    const poMap = new Map(prod.map((p) => [p.po, p]));
+
+    const sh = Object.keys(stockRows[0] || {});
+    const sc = {
+      code: col(sh, '품번', '상품코드'), name: col(sh, '상품명', '상품'), cat: col(sh, '카테고리'), season: col(sh, '시즌'),
+      color: col(sh, '컬러', '색상'), size: col(sh, '사이즈'), stock: col(sh, '현재재고', '재고'), avail: col(sh, '판매가능재고'),
+      safety: col(sh, '안전재고'), produced: col(sh, '생산수량', '누적입고수량', '입고수량'),
+      sold: col(sh, '누적판매수량', '누적판매'), recent: col(sh, '최근7일판매'), prev: col(sh, '이전7일판매'),
+      returns: col(sh, '반품수량'), last: col(sh, '마지막판매일'), prevStock: col(sh, '전월말재고'),
+    };
+    const stock = stockRows.map((r) => {
+      const name = str(r[sc.name]) || str(r[sc.code]) || '(없음)';
+      const st = num(r[sc.stock]), sold = num(r[sc.sold]);
+      return {
+        code: str(r[sc.code]) || name, name, category: sc.cat ? str(r[sc.cat]) : (catOf.get(name) ?? ''), season: str(r[sc.season]),
+        color: str(r[sc.color]) || '-', size: str(r[sc.size]) || '-', stock: st,
+        avail: sc.avail ? num(r[sc.avail]) : st, safety: num(r[sc.safety]), sold,
+        // 생산수량 열이 없으면 판매 + 재고로 추정
+        produced: sc.produced ? num(r[sc.produced]) : sold + st,
+        recent: num(r[sc.recent]), prev: num(r[sc.prev]), returns: num(r[sc.returns]),
+        last: time(r[sc.last]), prevStock: sc.prevStock ? num(r[sc.prevStock]) : null,
+      };
+    });
+
+    const qh = Object.keys(qcRows[0] || {});
+    const qcc = {
+      po: col(qh, '발주번호'), code: col(qh, '품번', '상품코드'), name: col(qh, '상품명', '상품'), vendor: col(qh, '거래처', '생산거래처'),
+      date: col(qh, '검품일'), inspected: col(qh, '검품수량'), defects: col(qh, '불량수량'), rework: col(qh, '재작업수량'), type: col(qh, '불량유형'),
+    };
+    const qc = qcRows.map((r) => {
+      const p = poMap.get(str(r[qcc.po]));
+      const name = str(r[qcc.name]) || (p ? p.name : str(r[qcc.code]) || '(없음)');
+      return {
+        po: str(r[qcc.po]), code: str(r[qcc.code]) || (p ? p.code : name), name,
+        category: p ? p.category : (catOf.get(name) ?? ''), vendor: str(r[qcc.vendor]) || (p ? p.vendor : '(미지정)'),
+        date: time(r[qcc.date]), inspected: num(r[qcc.inspected]), defects: num(r[qcc.defects]), rework: num(r[qcc.rework]),
+        type: str(r[qcc.type]) || '(유형 없음)',
+      };
+    });
+
+    const mh = Object.keys(matRows[0] || {});
+    const mc = {
+      code: col(mh, '자재코드'), name: col(mh, '자재명'), type: col(mh, '구분', '자재구분'), vendor: col(mh, '거래처', '공급처'),
+      unit: col(mh, '단위'), stock: col(mh, '현재재고', '재고'), safety: col(mh, '안전재고'), need: col(mh, '소요예정량', '소요량', '필요수량'),
+      incoming: col(mh, '입고예정수량'), due: col(mh, '입고예정일'), codes: col(mh, '사용상품코드', '사용품번', '품번', '상품코드'), pos: col(mh, '관련발주번호', '발주번호'),
+    };
+    const mat = matRows.map((r) => {
+      const st = num(r[mc.stock]), safety = num(r[mc.safety]), need = num(r[mc.need]), incoming = num(r[mc.incoming]);
+      const balance = st + incoming - need;
+      return {
+        code: str(r[mc.code]), name: str(r[mc.name]) || str(r[mc.code]), type: str(r[mc.type]), vendor: str(r[mc.vendor]), unit: str(r[mc.unit]),
+        stock: st, safety, need, incoming, due: time(r[mc.due]), balance, pos: str(r[mc.pos]),
+        codes: str(r[mc.codes]).split(/[,/;\s]+/).filter(Boolean),
+        state: balance < 0 ? '자재 부족' : st < safety ? '안전재고 미달' : st < need ? '입고 대기' : '정상',
+      };
+    });
+
+    // 기준일: 매출·재고·입고·검품 날짜 중 가장 늦은 날
+    const asOf = Math.max(state.maxT, ...stock.map((s) => s.last || 0), ...prod.map((p) => p.inDate || 0), ...qc.map((q) => q.date || 0));
+    const daysTo = (t) => Math.round((t - asOf) / DAY);
+    for (const p of prod) {
+      p.left = p.due == null ? null : daysTo(p.due);
+      p.late = !p.received && p.left != null && p.left < 0;
+      p.prodLate = !p.produced && p.prodDue != null && p.prodDue < asOf;
+      p.onTime = p.received && p.due != null && p.inDate != null ? p.inDate <= p.due : null;
+      p.state = p.received ? '입고 완료' : p.late ? '지연' : p.produced ? '입고 대기' : p.left != null && p.left <= RULES.soonDays ? '임박' : '예정';
+      p.stageIdx = STAGES.indexOf(p.stage);
+      const qs = qc.filter((q) => q.po === p.po);
+      p.inspected = sum(qs, 'inspected'); p.defects = sum(qs, 'defects');
+    }
+    for (const s of stock) {
+      s.idle = s.last ? -daysTo(s.last) : null;
+      s.cover = s.recent ? s.avail / (s.recent / 7) : null;
+      s.outDate = s.cover == null ? null : addDays(asOf, Math.floor(s.cover));
+      s.state = s.avail <= 0 ? '품절' : s.avail <= s.safety ? '안전재고 미달' : s.idle != null && s.idle > RULES.longDays ? '장기 재고' : '정상';
+      // 리오더: 팔리고 있는데 품절·안전재고 미달이거나 위험 기간 안에 소진
+      s.reorder = s.recent > 0 && (s.state === '품절' || s.state === '안전재고 미달' || s.cover < RULES.riskDays);
+      s.sellThrough = s.sold + s.stock ? s.sold / (s.sold + s.stock) : 0;
+    }
+
+    const codes = [...new Set([...stock.map((s) => s.code), ...prod.map((p) => p.code)])];
+    const products = codes.map((code) => {
+      const os = stock.filter((s) => s.code === code);
+      const pos = prod.filter((p) => p.code === code);
+      const qs = qc.filter((q) => q.code === code);
+      const open = pos.filter((p) => !p.received).sort((a, b) => (a.due ?? Infinity) - (b.due ?? Infinity));
+      const making = open.filter((p) => !p.produced && p.prodDue != null).sort((a, b) => a.prodDue - b.prodDue);
+      const done = pos.filter((p) => p.received);
+      const st = sum(os, 'stock'), avail = sum(os, 'avail'), sold = sum(os, 'sold'), recent = sum(os, 'recent'), returns = sum(os, 'returns');
+      const cover = recent ? avail / (recent / 7) : null;
+      const soldout = os.filter((s) => s.state === '품절').length, below = os.filter((s) => s.state === '안전재고 미달').length;
+      const first = os[0] || pos[0];
+      const receivedOrdered = sum(done, 'qty'), receivedQty = sum(done, 'inQty');
+      const inspected = sum(qs, 'inspected'), defects = sum(qs, 'defects');
+      return {
+        code, name: first.name, category: first.category,
+        season: (pos.find((p) => p.season) || os.find((s) => s.season) || {}).season || '',
+        vendor: [...new Set(pos.map((p) => p.vendor))].join(', ') || '—',
+        poCount: pos.length, orderQty: sum(pos, 'qty'), orderAmount: sum(pos, 'amount'), openQty: sum(open, 'qty'),
+        incoming: sum(open, 'qty'), nextDate: open.length ? open[0].due : null, prodDue: making.length ? making[0].prodDue : null,
+        receivedOrdered, receivedQty, inRate: receivedOrdered ? receivedQty / receivedOrdered : null,
+        stage: open.length ? open[0].stage + (open.length > 1 ? ` 외 ${open.length - 1}건` : '') : (pos.length ? '입고 완료' : '발주 없음'),
+        stock: st, avail, prevStock: os.some((s) => s.prevStock != null) ? sum(os, 'prevStock') : null,
+        sold, recent, prev: sum(os, 'prev'), returns, cover: cover == null ? null : Math.round(cover),
+        outDate: cover == null ? null : addDays(asOf, Math.floor(cover)),
+        sellThrough: sold + st ? sold / (sold + st) : 0, returnRate: sold ? returns / sold : 0, soldout, below,
+        reorderOpts: os.filter((s) => s.reorder).length, inspected, defects, defectRate: inspected ? defects / inspected : null,
+        longTerm: (cover == null && avail > 0) || cover > RULES.longCoverDays || os.some((s) => s.state === '장기 재고'),
+        status: (cover != null && cover < RULES.riskDays) || soldout ? '위험' : (cover != null && cover < RULES.warnDays) || below ? '주의' : '정상',
+      };
+    });
+    const productOf = new Map(products.map((p) => [p.code, p]));
+    for (const m of mat) {
+      const ps = m.codes.map((c) => productOf.get(c)).filter(Boolean);
+      m.cats = [...new Set(ps.map((p) => p.category))];
+      m.products = ps.length > 2 ? `${ps[0].name} 외 ${ps.length - 1}개` : ps.map((p) => p.name).join(', ') || '—';
+    }
+
+    // ---------- 알림 ----------
+    const alerts = [];
+    const add = (type, target, cats, code, detail, stockQty, schedule, level) => alerts.push({ type, target, cats, code, detail, stock: stockQty, schedule, level });
+    const nextText = (p) => p.nextDate ? `다음 입고 ${toISO(p.nextDate)}` : '입고 예정 없음';
+    const availOf = (code) => (productOf.get(code) || {}).avail;
+    for (const o of prod) {
+      if (o.late) add('납기 지연', o.name, [o.category], o.code, `${o.po} · ${o.vendor} · ${o.stage} · ${n(o.qty)}개`, availOf(o.code), `납기 ${toISO(o.due)} (${-o.left}일 지남)`, '위험');
+      else if (o.prodLate) add('생산 지연', o.name, [o.category], o.code, `${o.po} · ${o.vendor} · ${o.stage}`, availOf(o.code), `생산 완료 예정 ${toISO(o.prodDue)} (${-daysTo(o.prodDue)}일 지남)`, '주의');
+      if (o.state === '임박') add('입고 임박', o.name, [o.category], o.code, `${o.po} · ${o.stage} · ${n(o.qty)}개`, availOf(o.code), `납기 ${toISO(o.due)} (${o.left}일 남음)`, '주의');
+    }
+    for (const m of mat) {
+      const unit = m.unit ? m.unit : '';
+      if (m.state === '자재 부족') add('자재 부족', m.name, m.cats, m.codes[0], `${m.products} · ${n(-m.balance)}${unit} 부족 (소요 ${n(m.need)}${unit})`, null, m.due ? `자재 입고 ${toISO(m.due)}` : '입고 예정 없음', '위험');
+      else if (m.state === '안전재고 미달') add('자재 부족', m.name, m.cats, m.codes[0], `안전재고 미달 · 현재 ${n(m.stock)}${unit} / 안전재고 ${n(m.safety)}${unit}`, null, m.due ? `자재 입고 ${toISO(m.due)}` : '입고 예정 없음', '주의');
+    }
+    // 품질: 발주 단위로 불량률 판단
+    const byPo = new Map();
+    for (const q of qc) { const k = q.po || q.code; byPo.set(k, [...(byPo.get(k) || []), q]); }
+    const qcLots = [...byPo.entries()].map(([po, qs]) => {
+      const inspected = sum(qs, 'inspected'), defects = sum(qs, 'defects');
+      const types = new Map();
+      for (const q of qs) if (q.defects) types.set(q.type, (types.get(q.type) || 0) + q.defects);
+      const main = [...types.entries()].sort((a, b) => b[1] - a[1])[0];
+      const rate = inspected ? defects / inspected : 0;
+      return {
+        po, code: qs[0].code, name: qs[0].name, category: qs[0].category, vendor: qs[0].vendor, inspected, defects, rework: sum(qs, 'rework'),
+        rate, main: main ? main[0] : '—', verdict: rate >= RULES.defectRisk ? '불합격' : rate >= RULES.defectWarn ? '주의' : '합격',
+      };
+    });
+    for (const l of qcLots) if (l.verdict !== '합격')
+      add('품질 문제', l.name, [l.category], l.code, `${l.po} · ${l.vendor} · 불량 ${n(l.defects)}/${n(l.inspected)}개 (${pct1(l.rate)}) · ${l.main}`, availOf(l.code), '', l.verdict === '불합격' ? '위험' : '주의');
+    for (const p of products) {
+      const cats = [p.category];
+      if (p.status === '위험') add('재고 부족', p.name, cats, p.code, p.soldout ? `품절 옵션 ${p.soldout}개` + (p.cover != null ? ` · ${p.cover}일 뒤 소진 예상` : '') : `${p.cover}일 뒤 소진 예상`, p.avail, p.outDate ? `소진 예상 ${toISO(p.outDate)} · ${nextText(p)}` : nextText(p), '위험');
+      if (p.below) add('안전재고 미달', p.name, cats, p.code, `안전재고 이하 옵션 ${p.below}개`, p.avail, nextText(p), '주의');
+      if (p.status === '위험' && p.incoming < p.recent * RULES.reorderWeeks)
+        add('추가 발주 필요', p.name, cats, p.code, `${RULES.reorderWeeks}주 예상 판매 ${n(p.recent * RULES.reorderWeeks)}개, 입고 예정 ${n(p.incoming)}개`, p.avail, nextText(p), '위험');
+      if (p.recent >= RULES.surgeMin && p.prev && p.recent / p.prev >= RULES.surgeRatio)
+        add('판매 급증', p.name, cats, p.code, `최근 7일 ${n(p.recent)}개, 이전 7일 ${n(p.prev)}개 (+${((p.recent / p.prev - 1) * 100).toFixed(0)}%)`, p.avail, nextText(p), '주의');
+    }
+    for (const s of stock) if (s.state === '장기 재고') add('장기 재고', s.name, [s.category], s.code, `${s.color} / ${s.size}`, s.avail, `마지막 판매 ${toISO(s.last)} (${s.idle}일 전)`, '주의');
+    alerts.sort((a, b) => (a.level === '위험' ? 0 : 1) - (b.level === '위험' ? 0 : 1) || ALERT_TYPES.indexOf(a.type) - ALERT_TYPES.indexOf(b.type));
+
+    state.ops = {
+      asOf, prod, stock, mat, qc, qcLots, products, alerts,
+      sample: Object.fromEntries(KINDS.map((k) => [k, !state.files[k]])),
+      names: Object.fromEntries(KINDS.map((k) => [k, state.files[k] ? state.files[k].name : '샘플'])),
+      prodEstimated: !sc.produced,
+    };
+  }
+
+  function setKpi(id, value, sub, tone) {
+    $(id).textContent = value;
+    $(id + 'Sub').innerHTML = sub;
+    const card = $(id).closest('.kpi');
+    card.classList.toggle('is-bad', tone === 'bad');
+    card.classList.toggle('is-warn', tone === 'warn');
+  }
+  const mark = (id, tone) => { $(id).classList.toggle('bad', tone === 'bad'); $(id).classList.toggle('warn', tone === 'warn'); };
+
+  function renderOps() {
+    const o = state.ops;
+    if (!o) return;
+    const prod = o.prod.filter(inCat), stock = o.stock.filter(inCat), products = o.products.filter(inCat), qc = o.qc.filter(inCat);
+    const qcLots = o.qcLots.filter(inCat), mat = o.mat.filter(inCats), alerts = o.alerts.filter(inCats);
+
+    // 샘플 표시
+    for (const k of KINDS) document.querySelectorAll(`.${k}-badge`).forEach((e) => e.classList.toggle('hidden', !o.sample[k]));
+    const anySample = KINDS.some((k) => o.sample[k]);
+    document.querySelectorAll('.any-badge').forEach((e) => e.classList.toggle('hidden', !anySample));
+    $('sources').innerHTML =
+      `<span class="src">매출: <b>${escapeHtml(state.salesName)}</b></span>` +
+      KINDS.map((k) => `<span class="src">${KIND_LABEL[k]}: <b>${escapeHtml(o.names[k])}</b></span>`).join('') +
+      `<span class="src">운영 기준일: <b>${fmtDate(o.asOf)}</b></span>`;
+    $('opsNote').textContent = (anySample
+      ? `${KINDS.filter((k) => o.sample[k]).map((k) => KIND_LABEL[k]).join(', ')} 파일이 없어 매출 파일의 상품으로 만든 샘플을 보여줍니다. 실제 수치가 아닙니다. `
+      : '') + `생산·재고·품질은 기준일 ${fmtDate(o.asOf)} 현재 상태이며, 기간 선택과 관계없이 카테고리 선택만 반영합니다.`;
+
+    // ---------- 핵심 KPI ----------
+    const open = prod.filter((p) => !p.received);
+    const totalQty = sum(prod, 'qty');
+    const producedQty = sum(prod.filter((p) => p.produced), 'qty');
+    const waitingQty = sum(prod.filter((p) => p.produced && !p.received), 'qty');
+    const receivedQty = sum(prod, 'inQty');
+    const judged = prod.filter((p) => p.onTime != null);
+    const onTime = judged.length ? judged.filter((p) => p.onTime).length / judged.length : null;
+    const inspected = sum(qc, 'inspected'), defects = sum(qc, 'defects'), rework = sum(qc, 'rework');
+    const defectRate = inspected ? defects / inspected : null;
+    const late = prod.filter((p) => p.late);
+    const progress = totalQty ? producedQty / totalQty : 0;
+
+    setKpi('kPoQty', n(totalQty) + '개', `${n(prod.length)}건 · ${won(sum(prod, 'amount'))} · 진행 중 ${n(open.length)}건`);
+    setKpi('kProgress', totalQty ? pct1(progress) : '—',
+      `<span class="meter"><span style="width:${(progress * 100).toFixed(1)}%"></span></span>생산 완료 ${n(producedQty)} / 발주 ${n(totalQty)}개`);
+    setKpi('kOnTime', pctOr(onTime), judged.length ? `입고 ${judged.length}건 중 납기 내 ${judged.filter((p) => p.onTime).length}건 · 목표 ${pct1(RULES.onTimeGoal).replace('.0', '')}` : '입고 완료된 발주 없음',
+      onTime != null && onTime < RULES.onTimeGoal ? 'warn' : '');
+    setKpi('kDefect', pctOr(defectRate), inspected ? `검품 ${n(inspected)}개 중 불량 ${n(defects)}개 · 재작업 ${n(rework)}개` : '검품 기록 없음',
+      defectRate == null ? '' : defectRate >= RULES.defectRisk ? 'bad' : defectRate >= RULES.defectWarn ? 'warn' : '');
+    setKpi('kLate', n(late.length) + '건', late.length ? `${n(sum(late, 'qty'))}개 · 최대 ${Math.max(...late.map((p) => -p.left))}일 지연` : '<span class="up">지연 없음</span>',
+      late.length ? 'bad' : '');
+    setKpi('kDone', n(producedQty) + '개', `입고 완료 ${n(receivedQty)}개 · 입고 대기 ${n(waitingQty)}개`);
+
+    // ---------- 업무 흐름 ----------
+    const at = (lo, hi) => prod.filter((p) => !p.received && p.stageIdx >= lo && p.stageIdx <= hi);
+    const early = at(0, 1), making = at(2, 3), checking = at(4, 4);
+    const matShort = mat.filter((m) => m.state === '자재 부족').length, matSafe = mat.filter((m) => m.state === '안전재고 미달').length;
+    const makingLate = making.filter((p) => p.late || p.prodLate).length;
+    const qcBad = qcLots.filter((l) => l.verdict !== '합격').length;
+    const soon = prod.filter((p) => p.state === '임박').length;
+    const stockSum = sum(stock, 'stock'), availSum = sum(stock, 'avail');
+    const shortProducts = products.filter((p) => p.status === '위험').length, belowOpts = stock.filter((s) => s.state === '안전재고 미달').length;
+    const tag = (bad, warn, ok) => bad ? chip(bad, '위험') : warn ? chip(warn, '주의') : chip(ok, '정상');
+    const steps = [
+      ['secProd', '① 발주', `${n(prod.length)}건`, `${n(totalQty)}개 · ${won(sum(prod, 'amount'))}`, chip(`진행 중 ${open.length}건`, 'none')],
+      ['secMat', '② 원부자재 준비', `${n(early.length)}건`, `${n(sum(early, 'qty'))}개 · 자재 ${n(mat.length)}종`,
+        tag(matShort && `자재 부족 ${matShort}종`, matSafe && `안전재고 미달 ${matSafe}종`, '자재 정상')],
+      ['secProd', '③ 생산 (재단·봉제)', `${n(making.length)}건`, `${n(sum(making, 'qty'))}개`, tag(makingLate && `지연 ${makingLate}건`, '', '일정 정상')],
+      ['secQc', '④ 검품', `${n(checking.length)}건`, `검품 ${n(inspected)}개 · 불량률 ${pctOr(defectRate)}`, tag(qcBad && `품질 문제 ${qcBad}건`, '', '품질 정상')],
+      ['secProd', '⑤ 입고', `${n(receivedQty)}개`, `입고 대기 ${n(waitingQty)}개 · 생산 중 ${n(sum(open.filter((p) => !p.produced), 'qty'))}개`,
+        tag(late.length && `납기 지연 ${late.length}건`, soon && `입고 임박 ${soon}건`, '납기 정상')],
+      ['secStock', '⑥ 재고', `${n(stockSum)}개`, `판매 가능 ${n(availSum)}개`, tag(shortProducts && `재고 부족 ${shortProducts}개 상품`, belowOpts && `안전재고 미달 ${belowOpts}옵션`, '재고 정상')],
+    ];
+    $('flow').innerHTML = steps.map(([href, step, v, s, t]) =>
+      `<li><a href="#${href}"><span class="step">${step}</span><span class="v">${v}</span><span class="s">${s}</span>${t}</a></li>`).join('');
+
+    // ---------- 중요 알림 ----------
+    renderAlerts(alerts);
+
+    // ---------- ① 발주·생산 ----------
+    $('stages').innerHTML = STAGES.map((s, i) => {
+      const list = prod.filter((p) => p.stage === s);
+      const share = totalQty ? sum(list, 'qty') / totalQty : 0;
+      const lateHere = list.filter((p) => p.late || p.prodLate).length;
+      const color = s === '입고 완료' ? 'var(--up)' : s === '생산 완료' ? 'var(--c3)' : '';
+      return `<li class="stage ${lateHere ? 'late' : ''}"><span class="name">${i + 1}. ${s}</span><span class="v">${n(list.length)}건</span>` +
+        `<span class="meter"><span style="width:${(share * 100).toFixed(1)}%;${color ? 'background:' + color : ''}"></span></span>` +
+        `<span class="sub">${n(sum(list, 'qty'))}개 · ${pct1(share)}${lateHere ? ` · <b class="t-bad">지연 ${lateHere}</b>` : ''}</span></li>`;
+    }).join('');
+    $('progress').textContent = totalQty ? pct1(progress) : '—';
+
+    $('poCount').textContent = n(prod.length) + '건';
+    $('poQty').textContent = n(totalQty) + '개';
+    $('poAmount').textContent = won(sum(prod, 'amount'));
+    $('poOpen').textContent = n(open.length) + '건';
+    const byPoProd = products.filter((p) => p.poCount).sort((a, b) => b.orderAmount - a.orderAmount);
+    const maxQty = Math.max(1, ...byPoProd.map((p) => p.orderQty));
+    $('poBody').innerHTML = byPoProd.map((p) => `<tr><td class="strong">${escapeHtml(p.name)}</td><td class="num">${n(p.poCount)}건</td>` +
+      `<td class="num">${barCell(p.orderQty / maxQty, n(p.orderQty))}</td><td class="num">${n(p.orderAmount)}원</td><td class="num">${n(p.openQty)}</td></tr>`).join('');
+
+    const delays = [
+      ...late.map((p) => ({ p, kind: '납기 지연', due: p.due, days: -p.left, level: '위험' })),
+      ...prod.filter((p) => !p.late && p.prodLate).map((p) => ({ p, kind: '생산 지연', due: p.prodDue, days: Math.round((o.asOf - p.prodDue) / DAY), level: '주의' })),
+    ].sort((a, b) => (a.level === '위험' ? 0 : 1) - (b.level === '위험' ? 0 : 1) || b.days - a.days);
+    $('lateSub').textContent = `납기 지연 ${late.length}건 · 생산 지연 ${delays.length - late.length}건`;
+    $('lateBody').innerHTML = delays.map(({ p, kind, due, days, level }) =>
+      `<tr class="${rowTone(level)}"><td>${chip(kind, level)}</td><td>${escapeHtml(p.po)}</td><td>${escapeHtml(p.vendor)}</td><td class="strong">${escapeHtml(p.name)}</td>` +
+      `<td>${escapeHtml(p.stage)}</td><td>${toISO(due)}</td><td class="num ${level === '위험' ? 't-bad' : 't-warn'}"><b>${days}일</b></td><td class="num">${n(p.qty)}</td></tr>`).join('') ||
+      '<tr><td colspan="8">지연된 발주가 없습니다.</td></tr>';
+
+    const vendors = [...new Set(prod.map((p) => p.vendor))].map((name) => {
+      const ps = prod.filter((p) => p.vendor === name), qs = qc.filter((q) => q.vendor === name);
+      const qty = sum(ps, 'qty'), done = sum(ps.filter((p) => p.produced), 'qty');
+      const j = ps.filter((p) => p.onTime != null), ins = sum(qs, 'inspected');
+      return {
+        name, count: ps.length, qty, done, progress: qty ? done / qty : 0, open: ps.filter((p) => !p.received).length,
+        late: ps.filter((p) => p.late).length, onTime: j.length ? j.filter((p) => p.onTime).length / j.length : null,
+        defectRate: ins ? sum(qs, 'defects') / ins : null,
+      };
+    }).sort((a, b) => b.late - a.late || (b.defectRate ?? 0) - (a.defectRate ?? 0) || b.qty - a.qty);
+    $('vendorBody').innerHTML = vendors.map((v) => {
+      const tone = v.late || (v.defectRate ?? 0) >= RULES.defectRisk ? '위험' : (v.defectRate ?? 0) >= RULES.defectWarn || (v.onTime != null && v.onTime < RULES.onTimeGoal) ? '주의' : '';
+      return `<tr class="${rowTone(tone)}"><td class="strong">${escapeHtml(v.name)}</td><td class="num">${n(v.count)}건</td><td class="num">${n(v.qty)}</td><td class="num">${n(v.done)}</td>` +
+        `<td class="num">${barCell(v.progress, pct1(v.progress))}</td><td class="num">${n(v.open)}건</td>` +
+        `<td class="num ${v.late ? 't-bad' : ''}">${v.late ? `<b>${v.late}건</b>` : '0건'}</td>` +
+        `<td class="num ${v.onTime != null && v.onTime < RULES.onTimeGoal ? 't-warn' : ''}">${pctOr(v.onTime)}</td>` +
+        `<td class="num ${defectTone(v.defectRate)}">${pctOr(v.defectRate)}</td></tr>`;
+    }).join('');
+
+    const recOrdered = sum(prod.filter((p) => p.received), 'qty');
+    const next = open.filter((p) => p.due != null && !p.late).sort((a, b) => a.due - b.due)[0];
+    $('inbIncoming').textContent = n(sum(open, 'qty')) + '개';
+    $('inbWaiting').textContent = n(waitingQty) + '개';
+    $('inbReceived').textContent = n(receivedQty) + '개';
+    $('inbRate').textContent = recOrdered ? pct1(receivedQty / recOrdered) : '—';
+    $('inbNext').textContent = next ? fmtDate(next.due) : '없음';
+    $('inbLate').textContent = n(late.length) + '건';
+    mark('inbLateBox', late.length ? 'bad' : '');
+    const order = { 지연: 0, 임박: 1, '입고 대기': 2, 예정: 3, '입고 완료': 4 };
+    $('inbBody').innerHTML = [...prod].sort((a, b) => order[a.state] - order[b.state] || (a.due ?? 0) - (b.due ?? 0)).map((p) =>
+      `<tr class="${p.late ? 'r-bad' : ''}"><td>${escapeHtml(p.po)}</td><td>${escapeHtml(p.vendor)}</td><td class="strong">${escapeHtml(p.name)}</td><td class="num">${n(p.qty)}</td>` +
+      `<td class="num">${p.received ? n(p.inQty) : '—'}</td><td class="num">${p.received ? diffText(p.inQty - p.qty) : '—'}</td>` +
+      `<td>${escapeHtml(p.stage)}</td><td class="${p.prodLate ? 't-warn' : ''}">${dateOr(p.prodDue)}</td><td class="${p.late ? 't-bad' : ''}">${dateOr(p.due)}</td>` +
+      `<td>${dateOr(p.inDate)}${p.onTime === false ? ' <span class="t-warn">(늦음)</span>' : ''}</td><td>${chip(p.state)}</td></tr>`).join('');
+
+    // ---------- ② 원부자재 ----------
+    const matWait = mat.filter((m) => m.state === '입고 대기').length;
+    const matNext = mat.filter((m) => m.due != null && m.incoming).sort((a, b) => a.due - b.due)[0];
+    $('matCount').textContent = n(mat.length) + '종';
+    $('matShort').textContent = n(matShort) + '종';
+    $('matSafe').textContent = n(matSafe) + '종';
+    $('matWait').textContent = n(matWait) + '종';
+    $('matNext').textContent = matNext ? fmtDate(matNext.due) : '없음';
+    mark('matShortBox', matShort ? 'bad' : '');
+    mark('matSafeBox', matSafe ? 'warn' : '');
+    const matOrder = { '자재 부족': 0, '안전재고 미달': 1, '입고 대기': 2, 정상: 3 };
+    $('matBody').innerHTML = [...mat].sort((a, b) => matOrder[a.state] - matOrder[b.state] || a.balance - b.balance).map((m) => {
+      const u = escapeHtml(m.unit);
+      return `<tr class="${m.state === '자재 부족' ? 'r-bad' : m.state === '안전재고 미달' ? 'r-warn' : ''}"><td>${escapeHtml(m.code)}</td><td class="strong">${escapeHtml(m.name)}</td><td>${escapeHtml(m.type || '—')}</td>` +
+        `<td>${escapeHtml(m.vendor || '—')}</td><td class="dim">${escapeHtml(m.products)}</td><td class="num">${n(m.stock)} ${u}</td><td class="num">${n(m.safety)}</td>` +
+        `<td class="num">${n(m.need)}</td><td class="num">${n(m.incoming)}</td><td>${dateOr(m.due)}</td>` +
+        `<td class="num ${m.balance < 0 ? 't-bad' : ''}"><b>${m.balance > 0 ? '+' : m.balance < 0 ? '−' : ''}${n(Math.abs(m.balance))}</b></td><td>${chip(m.state)}</td></tr>`;
+    }).join('') || '<tr><td colspan="12">원부자재 데이터가 없습니다.</td></tr>';
+
+    // ---------- ③ 품질 ----------
+    $('qcInspected').textContent = n(inspected) + '개';
+    $('qcDefects').textContent = n(defects) + '개';
+    $('qcRate').textContent = pctOr(defectRate);
+    $('qcRework').textContent = n(rework) + '개';
+    $('qcReworkRate').textContent = defects ? pct1(rework / defects) : '—';
+    const qTone = defectRate == null ? '' : defectRate >= RULES.defectRisk ? 'bad' : defectRate >= RULES.defectWarn ? 'warn' : '';
+    mark('qcRateBox', qTone); mark('qcDefectsBox', qTone);
+    $('qcBody').innerHTML = [...qcLots].sort((a, b) => b.rate - a.rate).map((l) =>
+      `<tr class="${rowTone(l.verdict === '불합격' ? '위험' : l.verdict)}"><td>${escapeHtml(l.po)}</td><td>${escapeHtml(l.vendor)}</td><td class="strong">${escapeHtml(l.name)}</td>` +
+      `<td class="num">${n(l.inspected)}</td><td class="num">${n(l.defects)}</td><td class="num ${defectTone(l.rate)}"><b>${pct1(l.rate)}</b></td>` +
+      `<td class="num">${n(l.rework)}</td><td>${escapeHtml(l.main)}</td><td>${chip(l.verdict)}</td></tr>`).join('') ||
+      '<tr><td colspan="9">검품 기록이 없습니다.</td></tr>';
+    const css = getComputedStyle(document.documentElement);
+    const v = (x) => css.getPropertyValue(x).trim();
+    const byType = new Map();
+    for (const q of qc) if (q.defects) byType.set(q.type, (byType.get(q.type) || 0) + q.defects);
+    const types = [...byType.entries()].sort((a, b) => b[1] - a[1]);
+    if (defectChart) defectChart.destroy();
+    defectChart = horizontalBar($('defectChart'), types, v, (x) => ` ${n(x)}개 (${defects ? pct1(x / defects) : '—'})`, (x) => x.toLocaleString('ko-KR'), '--down');
+    $('defectTable').innerHTML = '<tr><th>불량 유형</th><th class="num">불량 수량</th><th class="num">비중</th></tr>' +
+      types.map(([k, x]) => `<tr><td>${escapeHtml(k)}</td><td class="num">${n(x)}</td><td class="num">${defects ? pct1(x / defects) : '—'}</td></tr>`).join('');
+
+    // ---------- ④ 재고 ----------
+    const sold = sum(stock, 'sold');
+    $('invStock').textContent = n(stockSum) + '개';
+    $('invAvail').textContent = n(availSum) + '개';
+    $('invLow').textContent = n(belowOpts) + '개';
+    $('invOut').textContent = n(stock.filter((s) => s.state === '품절').length) + '개';
+    $('invLong').textContent = n(products.filter((p) => p.longTerm).length) + '개';
+    $('invSell').textContent = sold + stockSum ? pct1(sold / (sold + stockSum)) : '—';
+    mark('invLowBox', belowOpts ? 'warn' : '');
+    mark('invOutBox', stock.some((s) => s.state === '품절') ? 'bad' : '');
+    $('statuses').innerHTML = ['위험', '주의', '정상'].map((s) => {
+      const list = products.filter((p) => p.status === s);
+      const color = s === '위험' ? 'var(--down)' : s === '주의' ? 'var(--warn)' : 'var(--up)';
+      return `<div class="status-row">${chip(s)}<b>${list.length}개</b><span class="meter"><span style="width:${products.length ? (list.length / products.length * 100).toFixed(1) : 0}%;background:${color}"></span></span>` +
+        `<span class="names">${list.length ? escapeHtml(list.map((p) => p.name).join(', ')) : '없음'}</span></div>`;
+    }).join('');
+    $('outBody').innerHTML = products.filter((p) => p.avail > 0 || p.recent).sort((a, b) => (a.cover ?? Infinity) - (b.cover ?? Infinity)).map((p) => {
+      const before = p.outDate != null && (p.nextDate == null || p.outDate < p.nextDate) && p.cover < RULES.warnDays;
+      return `<tr class="${rowTone(p.status)}"><td class="strong">${escapeHtml(p.name)}</td><td class="num">${n(p.avail)}</td><td class="num">${n(p.recent)}</td>` +
+        `<td class="${p.status === '위험' ? 't-bad' : p.status === '주의' ? 't-warn' : ''}">${p.outDate ? `<b>${toISO(p.outDate)}</b> (${n(p.cover)}일)` : '최근 판매 없음'}</td>` +
+        `<td>${p.nextDate ? `${toISO(p.nextDate)} · ${n(p.incoming)}개` : '—'}</td><td>${before ? chip('입고 전 소진', '위험') : '—'}</td><td>${chip(p.status)}</td></tr>`;
+    }).join('');
+
+    renderMdTable(products);
+    renderDetail();
+
+    // ---------- ⑥ 컬러·사이즈 ----------
+    const byColor = new Map();
+    for (const s of stock) {
+      const g = byColor.get(s.color) || { produced: 0, sold: 0, stock: 0 };
+      g.produced += s.produced; g.sold += s.sold; g.stock += s.stock;
+      byColor.set(s.color, g);
+    }
+    const colors = [...byColor.entries()].sort((a, b) => b[1].sold - a[1].sold);
+    if (colorChart) colorChart.destroy();
+    colorChart = groupedBar($('colorChart'), colors.map(([c]) => c), [
+      ['생산', colors.map(([, g]) => g.produced), '--compare'],
+      ['판매', colors.map(([, g]) => g.sold), '--series-1'],
+      ['현재 재고', colors.map(([, g]) => g.stock), '--c4'],
+    ], v, '개');
+    $('colorTable').innerHTML = '<tr><th>컬러</th><th class="num">생산</th><th class="num">판매</th><th class="num">재고</th><th class="num">판매율</th></tr>' +
+      colors.map(([c, g]) => `<tr><td>${escapeHtml(c)}</td><td class="num">${n(g.produced)}</td><td class="num">${n(g.sold)}</td><td class="num">${n(g.stock)}</td>` +
+        `<td class="num">${g.sold + g.stock ? pct1(g.sold / (g.sold + g.stock)) : '—'}</td></tr>`).join('');
+
+    const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '220', '230', '240', '250', '260', '270', '280', 'FREE'];
+    const rank = (s) => { const i = SIZE_ORDER.indexOf(s.toUpperCase()); return i < 0 ? 99 : i; };
+    const bySize = new Map();
+    for (const s of stock) {
+      const g = bySize.get(s.size) || { produced: 0, sold: 0, stock: 0, out: 0, low: 0 };
+      g.produced += s.produced; g.sold += s.sold; g.stock += s.stock;
+      if (s.state === '품절') g.out++;
+      if (s.state === '안전재고 미달') g.low++;
+      bySize.set(s.size, g);
+    }
+    const sizes = [...bySize.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]));
+    $('sizeBody').innerHTML = sizes.map(([size, g]) => {
+      const st = g.sold + g.stock ? g.sold / (g.sold + g.stock) : 0;
+      return `<tr><td class="strong">${escapeHtml(size)}</td><td class="num">${n(g.produced)}</td><td class="num">${n(g.sold)}</td><td class="num">${n(g.stock)}</td>` +
+        `<td class="num">${barCell(st, pct1(st))}</td><td class="num ${g.out ? 't-bad' : ''}">${g.out}</td><td class="num ${g.low ? 't-warn' : ''}">${g.low}</td></tr>`;
+    }).join('');
+
+    $('optNote').textContent = '옵션별 생산·판매·재고는 옵션 재고 파일 기준입니다. 아래 판매 현황의 매출 파일 수량과는 따로 집계합니다.' +
+      (o.prodEstimated ? ' 옵션 재고 파일에 생산수량 열이 없어 생산 = 누적 판매 + 현재 재고로 추정했습니다.' : '');
+    const optOrder = { 품절: 0, '안전재고 미달': 1, '장기 재고': 2, 정상: 3 };
+    const reorderCount = stock.filter((s) => s.reorder).length;
+    const opts = [...stock].filter((s) => !state.reorderOnly || s.reorder)
+      .sort((a, b) => (b.reorder - a.reorder) || optOrder[a.state] - optOrder[b.state] || (a.cover ?? Infinity) - (b.cover ?? Infinity));
+    $('optCount').innerHTML = `${n(stock.length)}개 옵션 · <b class="t-warn">리오더 필요 ${n(reorderCount)}개</b>`;
+    $('optBody').innerHTML = opts.map((s) =>
+      `<tr class="${s.reorder ? 'r-warn' : ''}"><td class="strong">${escapeHtml(s.name)}</td><td>${escapeHtml(s.color)}</td><td>${escapeHtml(s.size)}</td>` +
+      `<td class="num">${n(s.produced)}</td><td class="num">${n(s.sold)}</td><td class="num">${n(s.stock)}</td>` +
+      `<td class="num">${barCell(s.sellThrough, pct1(s.sellThrough))}</td>` +
+      `<td>${s.outDate ? `${toISO(s.outDate)} (${Math.floor(s.cover)}일)` : '—'}</td><td>${chip(s.state)}</td><td>${s.reorder ? chip('리오더') : '—'}</td></tr>`).join('') ||
+      '<tr><td colspan="10">조건에 맞는 옵션이 없습니다.</td></tr>';
+    $('rateBody').innerHTML = [...products].filter((p) => p.sold + p.stock).sort((a, b) => b.sellThrough - a.sellThrough).map((p) =>
+      `<tr><td class="strong">${escapeHtml(p.name)}</td><td class="num">${n(p.sold)}</td><td class="num">${n(p.stock)}</td>` +
+      `<td class="num">${barCell(p.sellThrough, pct1(p.sellThrough))}</td><td class="num">${n(p.returns)}</td><td class="num">${pct1(p.returnRate)}</td></tr>`).join('');
+
+    $('ruleDefs').innerHTML = [
+      `생산 공정: ${STAGES.join(' → ')}. 입고일이 있으면 입고 완료, 생산단계가 "생산 완료"인데 입고일이 없으면 입고 대기로 봅니다.`,
+      '생산 진행률·생산 완료 수량: 생산 완료 또는 입고 완료 단계인 발주의 발주 수량 ÷ 전체 발주 수량.',
+      `납기 준수율: 입고 완료된 발주 중 입고일이 납기일 이전인 비율 (목표 ${pct1(RULES.onTimeGoal)}). 지연 발주: 입고 전인데 납기일이 지난 발주.`,
+      `생산 지연: 생산 완료 전인데 생산 완료 예정일이 지난 발주. 입고 임박: 입고 전 발주의 납기일이 기준일부터 ${RULES.soonDays}일 이내.`,
+      '입고율: 입고 수량 ÷ 입고 완료된 발주의 발주 수량. 입고수량 열이 비어 있으면 발주 수량만큼 입고된 것으로 봅니다.',
+      `불량률: 불량 수량 ÷ 검품 수량. 발주별 ${pct1(RULES.defectWarn)} 이상이면 주의, ${pct1(RULES.defectRisk)} 이상이면 불합격(위험)으로 표시합니다.`,
+      '원부자재 과부족 = 현재 재고 + 입고 예정 − 소요 예정. 0 미만이면 자재 부족, 현재 재고가 안전재고보다 적으면 안전재고 미달, 지금 재고로는 모자라지만 입고 예정으로 채워지면 입고 대기.',
+      `재고 상태 위험: 판매 가능 재고가 최근 7일 판매 속도로 ${RULES.riskDays}일 안에 소진되거나 품절 옵션이 있음. 주의: ${RULES.warnDays}일 안에 소진되거나 안전재고 미달 옵션이 있음.`,
+      '안전재고 미달 옵션: 판매 가능 재고가 0보다 많고 안전재고 이하. 품절 옵션: 판매 가능 재고 0. 소진 예상일 = 기준일 + 판매 가능 재고 ÷ (최근 7일 판매 ÷ 7).',
+      `리오더 필요 옵션: 최근 7일 판매가 있고, 품절·안전재고 미달이거나 ${RULES.riskDays}일 안에 소진 예상.`,
+      `추가 발주 필요: 재고 상태가 위험이고, 입고 예정 수량이 앞으로 ${RULES.reorderWeeks}주 예상 판매(최근 7일 판매 × ${RULES.reorderWeeks})보다 적음.`,
+      `장기 재고: ${RULES.longDays}일 넘게 판매가 없는 옵션이 있거나, 재고가 ${RULES.longCoverDays}일치 판매량을 넘는 상품. 판매 급증: 최근 7일 판매가 이전 7일의 ${RULES.surgeRatio}배 이상이고 ${RULES.surgeMin}개 이상.`,
+      '판매율(재고 소진율): 누적 판매 ÷ (누적 판매 + 현재 재고). 반품률: 반품 수량 ÷ 누적 판매 수량.',
+    ].map((t) => `<li>${t}</li>`).join('');
+  }
+
+  function renderAlerts(alerts) {
+    const types = ALERT_TYPES.filter((t) => alerts.some((a) => a.type === t));
+    if (state.alertType && !types.includes(state.alertType)) state.alertType = '';
+    const bad = alerts.filter((a) => a.level === '위험').length;
+    $('alertCard').classList.toggle('calm', !bad);
+    $('alertSum').innerHTML = `<b class="t-bad">위험 ${bad}건</b> · <b class="t-warn">주의 ${alerts.length - bad}건</b> · 위험 먼저`;
+    $('alertChips').innerHTML = `<button data-t="" aria-pressed="${!state.alertType}">전체 <b>${alerts.length}</b></button>` +
+      types.map((t) => {
+        const list = alerts.filter((a) => a.type === t);
+        return `<button data-t="${t}" aria-pressed="${state.alertType === t}" class="${list.some((a) => a.level === '위험') ? 't-bad' : 't-warn'}">${t} <b>${list.length}</b></button>`;
+      }).join('');
+    const list = alerts.filter((a) => !state.alertType || a.type === state.alertType);
+    const shown = state.alertAll ? list : list.slice(0, ALERT_SHOW);
+    $('alertBody').innerHTML = shown.map((a) =>
+      `<tr class="${rowTone(a.level)}" ${a.code ? `data-code="${escapeHtml(a.code)}"` : ''}><td>${chip(a.type, a.level)}</td><td class="strong">${escapeHtml(a.target)}</td><td>${escapeHtml(a.detail)}</td>` +
+      `<td class="num">${a.stock == null ? '—' : n(a.stock) + '개'}</td><td>${escapeHtml(a.schedule || '—')}</td><td>${chip(a.level)}</td></tr>`).join('') ||
+      '<tr><td colspan="6">알림 조건에 걸린 항목이 없습니다.</td></tr>';
+    $('alertMore').classList.toggle('hidden', list.length <= ALERT_SHOW);
+    $('alertMore').textContent = state.alertAll ? '접기' : `나머지 ${list.length - ALERT_SHOW}건 더 보기`;
+  }
+
+  // ---------- 상품 관리 표 ----------
+  const STATUS_RANK = { 위험: 0, 주의: 1, 정상: 2 };
+  const TEXT_KEYS = ['name', 'code', 'season', 'vendor', 'stage', 'prodDue', 'nextDate', 'outDate', 'status'];
+  function mdList(products) {
+    const q = state.q.trim().toLowerCase();
+    const k = state.sort;
+    const val = (p) => k === 'status' ? STATUS_RANK[p.status] : ['prodDue', 'nextDate', 'outDate', 'inRate'].includes(k) ? (p[k] ?? Infinity) : p[k];
+    return products
+      .filter((p) => !q || [p.name, p.code, p.vendor].some((x) => x.toLowerCase().includes(q)))
+      .filter((p) => !state.st || p.status === state.st)
+      .filter((p) => !state.season || p.season === state.season)
+      .sort((a, b) => {
+        const x = val(a), y = val(b);
+        const c = typeof x === 'number' && typeof y === 'number' ? (x === y ? 0 : x === Infinity ? 1 : y === Infinity ? -1 : x - y) : String(x).localeCompare(String(y), 'ko');
+        return state.dir * c || a.name.localeCompare(b.name, 'ko');
+      });
+  }
+
+  function renderMdTable(products) {
+    const list = mdList(products);
+    $('mdCount').textContent = `${products.length}개 상품 중 ${list.length}개 표시`;
+    document.querySelectorAll('#mdHead th').forEach((th) => th.setAttribute('aria-sort', th.dataset.k === state.sort ? (state.dir > 0 ? 'ascending' : 'descending') : 'none'));
+    $('mdBody').innerHTML = list.map((p) =>
+      `<tr data-code="${escapeHtml(p.code)}" class="${p.code === state.sel ? 'on' : ''} ${rowTone(p.status)}"><td class="strong">${escapeHtml(p.name)}</td><td>${escapeHtml(p.code)}</td>` +
+      `<td>${escapeHtml(p.season || '—')}</td><td>${escapeHtml(p.vendor)}</td>` +
+      `<td class="num">${n(p.orderQty)}</td><td class="num">${n(p.receivedQty)}</td>` +
+      `<td class="num">${p.inRate == null ? '—' : barCell(p.inRate, `${pct1(p.inRate)} <span class="dim">(${diffText(p.receivedQty - p.receivedOrdered)})</span>`, p.inRate < 1 ? 'var(--warn)' : '')}</td>` +
+      `<td class="num">${n(p.stock)}</td><td class="num">${n(p.sold)}</td><td class="num">${n(p.incoming)}</td>` +
+      `<td>${dateOr(p.prodDue)}</td><td>${dateOr(p.nextDate)}</td>` +
+      `<td class="${p.status === '위험' ? 't-bad' : p.status === '주의' ? 't-warn' : ''}">${p.outDate ? toISO(p.outDate) : '—'}</td>` +
+      `<td>${escapeHtml(p.stage)}</td><td>${chip(p.status)}</td></tr>`).join('') ||
+      '<tr><td colspan="15">조건에 맞는 상품이 없습니다.</td></tr>';
+  }
+
+  function renderDetail() {
+    const o = state.ops;
+    const p = o && o.products.find((x) => x.code === state.sel);
+    $('detail').classList.toggle('hidden', !p);
+    if (!p) return;
+    $('dTitle').innerHTML = `상품 상세 · ${escapeHtml(p.name)} (${escapeHtml(p.code)}) ${chip(p.status)}`;
+    const minis = [
+      ['시즌 · 거래처', `${escapeHtml(p.season || '—')} · ${escapeHtml(p.vendor)}`], ['판매 가능 재고', n(p.avail) + '개'], ['누적 판매', n(p.sold) + '개'],
+      ['판매율', pct1(p.sellThrough)], ['반품률', pct1(p.returnRate)], ['불량률', pctOr(p.defectRate)],
+      ['입고율', p.inRate == null ? '—' : `${pct1(p.inRate)} (${n(p.receivedQty)}/${n(p.receivedOrdered)})`],
+      ['소진 예상일', p.outDate ? `${toISO(p.outDate)} (${n(p.cover)}일)` : '최근 판매 없음'],
+      ['입고 예정', n(p.incoming) + '개' + (p.nextDate ? ` (${toISO(p.nextDate)})` : '')],
+    ];
+    $('dMinis').innerHTML = minis.map(([l, v]) => `<div class="mini"><div class="label">${l}</div><div class="v" style="font-size: 17px">${v}</div></div>`).join('');
+    $('dOpts').innerHTML = o.stock.filter((s) => s.code === p.code).map((s) =>
+      `<tr><td>${escapeHtml(s.color)}</td><td>${escapeHtml(s.size)}</td><td class="num">${n(s.stock)}</td><td class="num">${n(s.avail)}</td>` +
+      `<td class="num">${n(s.recent)}</td><td>${chip(s.state)}${s.reorder ? ' ' + chip('리오더') : ''}</td></tr>`).join('') || '<tr><td colspan="6">옵션 재고 없음</td></tr>';
+    $('dPos').innerHTML = o.prod.filter((x) => x.code === p.code).sort((a, b) => (a.ordered ?? 0) - (b.ordered ?? 0)).map((x) =>
+      `<tr><td>${escapeHtml(x.po)}</td><td>${escapeHtml(x.vendor)}</td><td class="num">${n(x.qty)}</td><td class="num">${x.received ? n(x.inQty) : '—'}</td>` +
+      `<td>${escapeHtml(x.stage)}</td><td>${dateOr(x.due)}</td><td>${chip(x.state)}</td></tr>`).join('') || '<tr><td colspan="7">발주 없음</td></tr>';
+  }
+
+  // 표 내보내기: 지금 화면에 보이는 상품 관리 표 그대로
+  function exportRows() {
+    return mdList(state.ops.products.filter(inCat)).map((p) => ({
+      상품명: p.name, 품번: p.code, 카테고리: p.category, 시즌: p.season, '생산 거래처': p.vendor,
+      '발주 수량': p.orderQty, '입고 수량': p.receivedQty, '입고율': p.inRate == null ? '' : +(p.inRate * 100).toFixed(1),
+      '현재 재고': p.stock, '누적 판매 수량': p.sold, '입고 예정 수량': p.incoming,
+      '생산 완료 예정일': p.prodDue ? toISO(p.prodDue) : '', '입고 예정일': p.nextDate ? toISO(p.nextDate) : '', '소진 예상일': p.outDate ? toISO(p.outDate) : '',
+      '불량률': p.defectRate == null ? '' : +(p.defectRate * 100).toFixed(1), '생산 진행 상태': p.stage, '재고 상태': p.status,
+    }));
+  }
+  const exportName = () => `상품관리_${toISO(state.ops.asOf)}${KINDS.some((k) => state.ops.sample[k]) ? '_샘플포함' : ''}`;
+  $('csvBtn').onclick = () => {
+    const rows = exportRows();
+    if (!rows.length) return;
+    const esc = (v) => { const s = String(v ?? ''); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const head = Object.keys(rows[0]);
+    const csv = '﻿' + [head, ...rows.map((r) => head.map((h) => r[h]))].map((l) => l.map(esc).join(',')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = exportName() + '.csv';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  $('xlsxBtn').onclick = () => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(exportRows()), '상품관리');
+    XLSX.writeFile(wb, exportName() + '.xlsx');
+  };
+
+  // ---------- UI ----------
+  function showDash() {
+    $('empty').classList.add('hidden');
+    $('dash').classList.remove('hidden');
+    $('fileName').textContent = '파일을 더 끌어다 놓으면 같은 종류의 데이터만 바뀝니다 (매출 / 발주·생산 / 옵션 재고 / 원부자재 / 검품)';
+    syncButtons();
+  }
+
+  function showError(msg) {
+    $('error').textContent = msg;
+    if (msg && !$('dash').classList.contains('hidden')) alert(msg);
+  }
+
+  function buildMappingUI() {
+    document.querySelectorAll('#mapping select').forEach((sel) => {
+      const role = sel.dataset.role;
+      const optional = role !== 'date' && role !== 'amount';
+      sel.innerHTML = (optional ? '<option value="">(없음)</option>' : '<option value="">선택</option>') +
+        state.headers.map((h) => `<option ${h === state.map[role] ? 'selected' : ''}>${escapeHtml(String(h))}</option>`).join('');
+      sel.onchange = () => {
+        state.map[role] = sel.value;
+        if (state.map.date && state.map.amount) rebuild();
+      };
+    });
+  }
+
+  function buildCatSelect() {
+    const sel = $('catSelect');
+    sel.classList.toggle('hidden', !state.map.cat);
+    if (!state.catRank.includes(state.cat)) state.cat = '';
+    sel.innerHTML = '<option value="">카테고리 전체</option>' + state.catRank.map((c) => `<option ${c === state.cat ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
+  }
+
+  function buildSeasonSelect() {
+    const seasons = [...new Set(state.ops.products.map((p) => p.season).filter(Boolean))].sort().reverse();
+    if (!seasons.includes(state.season)) state.season = '';
+    $('seasonFilter').classList.toggle('hidden', !seasons.length);
+    $('seasonFilter').innerHTML = '<option value="">시즌 전체</option>' + seasons.map((s) => `<option ${s === state.season ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('');
+  }
+
+  function syncButtons() {
+    document.querySelectorAll('#periodSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.p === state.period));
+    document.querySelectorAll('#grainSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.g === state.grain));
+    $('customRange').classList.toggle('show', state.period === 'custom');
+  }
+
+  const refreshMd = () => renderMdTable(state.ops.products.filter(inCat));
+  const openDetail = (code) => {
+    state.sel = state.sel === code ? null : code;
+    refreshMd();
+    renderDetail();
+    if (state.sel) $('detail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+
+  $('periodSeg').onclick = (e) => {
+    const p = e.target.dataset.p; if (!p) return;
+    state.period = p;
+    // 기간이 길면 자동으로 주/월 단위로
+    if (p === 'all' || p === '90') state.grain = daysBetween(...currentRange()) > 120 ? 'month' : 'week';
+    else if (p !== 'custom') state.grain = 'day';
+    syncButtons(); render();
+  };
+  $('grainSeg').onclick = (e) => { const g = e.target.dataset.g; if (!g) return; state.grain = g; syncButtons(); render(); };
+  $('fromDate').onchange = $('toDate').onchange = () => render();
+  $('catSelect').onchange = () => { state.cat = $('catSelect').value; render(); };
+  $('search').oninput = () => { state.q = $('search').value; refreshMd(); };
+  $('stFilter').onchange = () => { state.st = $('stFilter').value; refreshMd(); };
+  $('seasonFilter').onchange = () => { state.season = $('seasonFilter').value; refreshMd(); };
+  $('reorderOnly').onchange = () => { state.reorderOnly = $('reorderOnly').checked; renderOps(); };
+  $('mdHead').onclick = (e) => {
+    const th = e.target.closest('th'); if (!th) return;
+    const k = th.dataset.k;
+    state.dir = state.sort === k ? -state.dir : (TEXT_KEYS.includes(k) ? 1 : -1);
+    state.sort = k;
+    refreshMd();
+  };
+  $('mdBody').onclick = (e) => { const tr = e.target.closest('tr[data-code]'); if (tr) openDetail(tr.dataset.code); };
+  $('dClose').onclick = () => { state.sel = null; refreshMd(); renderDetail(); };
+  $('alertChips').onclick = (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    state.alertType = b.dataset.t; state.alertAll = false;
+    renderAlerts(state.ops.alerts.filter(inCats));
+  };
+  $('alertMore').onclick = () => { state.alertAll = !state.alertAll; renderAlerts(state.ops.alerts.filter(inCats)); };
+  // 알림 행을 누르면 해당 상품 상세로
+  $('alertBody').onclick = (e) => {
+    const tr = e.target.closest('tr[data-code]');
+    if (tr && state.ops.products.some((p) => p.code === tr.dataset.code)) { state.sel = null; openDetail(tr.dataset.code); }
+  };
+
+  const input = $('fileInput');
+  $('pickBtn').onclick = $('pickBtn2').onclick = () => input.click();
+  input.onchange = () => { if (input.files.length) readFiles([...input.files]); input.value = ''; };
+
+  const drop = $('empty');
+  ['dragenter', 'dragover'].forEach((ev) => document.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((ev) => document.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+  document.addEventListener('drop', (e) => { if (e.dataTransfer.files.length) readFiles([...e.dataTransfer.files]); });
+
+  $('sampleBtn').onclick = () => {
+    state.rows = makeSample(); state.salesName = '샘플 데이터 (가상)';
+    state.headers = Object.keys(state.rows[0]); state.map = guessMapping(state.headers);
+    state.files = {};
+    afterLoad();
+  };
+
+  // 입력 양식: 시트 5개짜리 엑셀 (매출 / 발주생산 / 옵션재고 / 원부자재 / 검품), 예시 2행씩
+  $('templateBtn').onclick = () => {
+    const wb = XLSX.utils.book_new();
+    const sheet = (rows, name) => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), name);
+    sheet([
+      { 날짜: '2025-03-01', 주문번호: 'O10001', 상품명: '면티셔츠', 카테고리: '상의', 수량: 2, 매출: 58000, 반품여부: 'N' },
+      { 날짜: '2025-03-02', 주문번호: 'O10002', 상품명: '슬랙스', 카테고리: '하의', 수량: 1, 매출: 49000, 반품여부: 'Y' },
+    ], '매출');
+    sheet([
+      { 발주번호: 'PO-0001', 시즌: '25SS', 품번: 'TS-001', 상품명: '면티셔츠', 카테고리: '상의', 거래처: '한빛봉제', 발주일: '2025-02-24', 발주수량: 300, 발주단가: 12000,
+        생산단계: '봉제', 생산완료예정일: '2025-03-30', 납기일: '2025-04-03', 입고일: '', 입고수량: '' },
+      { 발주번호: 'PO-0002', 시즌: '25SS', 품번: 'PT-002', 상품명: '슬랙스', 카테고리: '하의', 거래처: '대성어패럴', 발주일: '2025-01-10', 발주수량: 200, 발주단가: 20000,
+        생산단계: '입고 완료', 생산완료예정일: '2025-02-10', 납기일: '2025-02-14', 입고일: '2025-02-17', 입고수량: 194 },
+    ], '발주생산');
+    sheet([
+      { 품번: 'TS-001', 상품명: '면티셔츠', 카테고리: '상의', 컬러: '화이트', 사이즈: 'M', 생산수량: 110, 현재재고: 12, 판매가능재고: 10, 안전재고: 5, 누적판매수량: 96,
+        최근7일판매: 9, 이전7일판매: 5, 반품수량: 3, 마지막판매일: '2025-03-29', 전월말재고: 18 },
+      { 품번: 'PT-002', 상품명: '슬랙스', 카테고리: '하의', 컬러: '블랙', 사이즈: 'L', 생산수량: 62, 현재재고: 15, 판매가능재고: 15, 안전재고: 4, 누적판매수량: 46,
+        최근7일판매: 3, 이전7일판매: 3, 반품수량: 1, 마지막판매일: '2025-03-30', 전월말재고: 18 },
+    ], '옵션재고');
+    sheet([
+      { 자재코드: 'F-TS001', 자재명: '면 싱글저지 30수', 구분: '원단', 거래처: '동진텍스타일', 단위: 'yd', 현재재고: 180, 안전재고: 50, 소요예정량: 420, 입고예정수량: 300,
+        입고예정일: '2025-04-02', 사용상품코드: 'TS-001', 관련발주번호: 'PO-0001' },
+      { 자재코드: 'T-LABEL', 자재명: '케어라벨', 구분: '부자재', 거래처: '라벨나라', 단위: '개', 현재재고: 800, 안전재고: 1000, 소요예정량: 300, 입고예정수량: 0,
+        입고예정일: '', 사용상품코드: 'TS-001,PT-002', 관련발주번호: '' },
+    ], '원부자재');
+    sheet([
+      { 발주번호: 'PO-0002', 품번: 'PT-002', 상품명: '슬랙스', 거래처: '대성어패럴', 검품일: '2025-02-12', 검품수량: 120, 불량수량: 5, 불량유형: '봉제 불량', 재작업수량: 3 },
+      { 발주번호: 'PO-0002', 품번: 'PT-002', 상품명: '슬랙스', 거래처: '대성어패럴', 검품일: '2025-02-13', 검품수량: 80, 불량수량: 2, 불량유형: '오염', 재작업수량: 1 },
+    ], '검품');
+    XLSX.writeFile(wb, 'MD대시보드_입력양식.xlsx');
+  };
+
+  if (location.hash === '#sample') $('sampleBtn').click();
+
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (state.records.length) render(); });
+
+  // 미리보기용 가상 매출: 최근 120일, 주말·성장 패턴, 반품 약 5%
+  function makeSample() {
+    const products = ['베이직 티셔츠', '데님 팬츠', '후드 집업', '린넨 셔츠', '캔버스 백', '울 니트', '스니커즈', '볼캡', '양말 3팩', '트렌치 코트', '머플러', '반바지'];
+    const prices = [29000, 59000, 69000, 49000, 35000, 79000, 89000, 25000, 12000, 159000, 39000, 32000];
+    const cats = ['상의', '하의', '상의', '상의', '가방', '상의', '신발', '액세서리', '액세서리', '아우터', '액세서리', '하의'];
+    const weights = [9, 7, 6, 5, 5, 4, 4, 3, 3, 2, 2, 1];
+    const wsum = weights.reduce((a, b) => a + b, 0);
+    let seed = 7;
+    const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const rows = [];
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let id = 10001;
+    for (let i = 119; i >= 0; i--) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      const weekend = d.getDay() === 0 || d.getDay() === 6;
+      const cnt = Math.round((18 + (119 - i) * 0.08) * (weekend ? 1.4 : 1) * (0.75 + rand() * 0.5));
+      for (let j = 0; j < cnt; j++) {
+        let x = rand() * wsum, k = 0;
+        while ((x -= weights[k]) > 0) k++;
+        const qty = rand() < 0.8 ? 1 : 2;
+        rows.push({ '주문일': toISO(d.getTime()), '주문번호': 'O' + id++, '상품명': products[k], '카테고리': cats[k], '수량': qty, '결제금액': prices[k] * qty, '반품여부': rand() < 0.05 ? 'Y' : 'N' });
+      }
+    }
+    return rows;
+  }
+
+  // 생산·재고·원부자재·검품 샘플: 지금 매출 파일의 상위 상품으로, 양식과 같은 열 이름의 행을 만듦
+  // 상품마다 정상·주의·위험·장기 재고·지연·임박·자재 부족·품질 문제가 골고루 나오도록 순서대로 성격을 줌
+  function makeOpsSample(asOf) {
+    let seed = 11;
+    const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const ri = (a, b) => a + Math.floor(rand() * (b - a + 1));
+    const day = (k) => toISO(addDays(asOf, k));
+    const byDim = new Map();
+    for (const r of state.records) {
+      if (r.ret) continue;
+      const g = byDim.get(r.dim) || { name: r.dim, cat: r.cat ?? '', sales: 0, qty: 0, amount: 0 };
+      g.sales += r.amount; g.qty += r.qty;
+      byDim.set(r.dim, g);
+    }
+    const top = [...byDim.values()].sort((a, b) => b.sales - a.sales).slice(0, 12);
+    const year = new Date(asOf).getFullYear(), half = new Date(asOf).getMonth() < 6;
+    const season = `${String(year).slice(2)}${half ? 'SS' : 'FW'}`;
+    const lastSeason = half ? `${String(year - 1).slice(2)}FW` : `${String(year).slice(2)}SS`;
+    const VENDORS = ['한빛봉제', '대성어패럴', '서울니트'];
+    const DEFECTS = ['봉제 불량', '오염', '치수 불량', '원단 불량', '부자재 불량'];
+    const prod = [], stock = [], mat = [], qc = [];
+    let po = 1;
+    // 검품 기록: 두 로트로 나눠 유형이 다르게
+    const inspect = (o, share, rate, dayOffset) => {
+      const total = Math.round(o.발주수량 * share);
+      const a = Math.round(total * 0.6);
+      [a, total - a].forEach((lot, k) => {
+        const defects = Math.round(lot * rate * (0.7 + rand() * 0.6));
+        qc.push({ 발주번호: o.발주번호, 품번: o.품번, 상품명: o.상품명, 거래처: o.거래처, 검품일: day(dayOffset + k), 검품수량: lot,
+          불량수량: defects, 불량유형: DEFECTS[ri(0, DEFECTS.length - 1)], 재작업수량: Math.round(defects * 0.6) });
+      });
+    };
+    top.forEach((p, i) => {
+      const code = `P${pad(i + 1).padStart(3, '0')}`;
+      const unit = Math.round(p.sales / Math.max(1, p.qty) * 0.42 / 100) * 100;
+      const shoes = /신발|슈즈|shoe/i.test(p.cat), free = /가방|액세서리|잡화|모자|양말|bag|acc/i.test(p.cat);
+      const sizes = shoes ? ['230', '240', '250', '260', '270'] : free ? ['FREE'] : ['S', 'M', 'L', 'XL'];
+      const colors = shoes ? ['화이트', '블랙'] : free ? ['블랙', '베이지'] : ['블랙', '화이트', '네이비'].slice(0, 2 + (i % 2));
+      const vendor = shoes ? '명성제화' : free ? '동방잡화' : VENDORS[i % 3];
+      const profile = ['위험', '정상', '주의', '장기', '정상', '급증'][i % 6];
+      const weekly = Math.max(6, Math.round(40 / (1 + i * 0.35)));
+      const opts = colors.flatMap((c) => sizes.map((s) => [c, s]));
+      opts.forEach(([c, s], j) => {
+        const share = 1 / opts.length * (0.6 + rand() * 0.8);
+        const recent = Math.max(0, Math.round(weekly * share * (profile === '급증' ? 1.4 : 1)));
+        const prevW = Math.max(0, Math.round(profile === '급증' ? recent / 1.8 : weekly * share * (0.7 + rand() * 0.5)));
+        const safety = Math.max(2, Math.round(weekly * share));
+        const coverW = profile === '위험' ? 0.7 : profile === '주의' ? 2.5 : profile === '장기' ? 25 : 6 + rand() * 4;
+        let st = Math.round(recent * coverW + rand() * 3);
+        if (profile === '위험' && j === 1) st = 0;
+        if (profile === '주의' && j === 0) st = Math.max(1, safety - 1);
+        const idle = profile === '장기' && j === opts.length - 1 ? ri(40, 60) : ri(0, 5);
+        const sold = recent * ri(8, 14);
+        stock.push({
+          상품코드: code, 상품명: p.name, 카테고리: p.cat, 컬러: c, 사이즈: s, 생산수량: sold + st + ri(0, 4), 현재재고: st, 판매가능재고: Math.max(0, st - (rand() < 0.2 ? 1 : 0)),
+          안전재고: safety, 누적판매수량: sold, 최근7일판매: idle > 7 ? 0 : recent, 이전7일판매: idle > 14 ? 0 : prevW,
+          반품수량: ri(0, 3), 마지막판매일: day(-idle), 전월말재고: st + ri(-5, 15),
+        });
+      });
+      const base = { 품번: code, 상품명: p.name, 카테고리: p.cat, 거래처: vendor, 발주단가: unit };
+      const rate = vendor === '대성어패럴' ? 0.05 + rand() * 0.03 : 0.008 + rand() * 0.02;
+      // 지난 시즌 완료 발주 1건: 일부는 늦게·덜 들어옴
+      const qty = Math.round(weekly * ri(6, 10) / 10) * 10;
+      const due0 = -ri(35, 45);
+      const past = { 발주번호: `PO-${pad(po++).padStart(4, '0')}`, 시즌: lastSeason, ...base, 발주일: day(due0 - ri(35, 45)), 발주수량: qty,
+        생산단계: '입고 완료', 생산완료예정일: day(due0 - 4), 납기일: day(due0), 입고일: day(due0 + (i % 4 === 2 ? ri(2, 6) : -ri(0, 3))),
+        입고수량: i % 3 === 1 ? qty - ri(3, 12) : qty };
+      prod.push(past);
+      inspect(past, 1, rate, due0 - 5);
+      // 진행 중 발주: 상품마다 다른 단계·납기
+      const stage = [4, 3, 2, 1, 5, 1][i % 6];
+      const due = [-5, 18, 25, 30, 4, 12][i % 6];
+      const early = [];
+      if (profile !== '장기') {
+        const cur = { 발주번호: `PO-${pad(po++).padStart(4, '0')}`, 시즌: season, ...base, 발주일: day(due - ri(35, 45)), 발주수량: qty,
+          생산단계: STAGES[stage], 생산완료예정일: day(due - 4 - (i % 6 === 2 ? 25 : 0)), 납기일: day(due), 입고일: '', 입고수량: '' };
+        prod.push(cur);
+        if (stage >= 4) inspect(cur, stage === 4 ? 0.6 : 1, rate, -ri(1, 4));
+        if (stage <= 1) early.push(cur);
+      }
+      if (i % 4 === 1) {
+        const extra = { 발주번호: `PO-${pad(po++).padStart(4, '0')}`, 시즌: season, ...base, 발주일: day(-ri(3, 10)), 발주수량: Math.round(qty / 20) * 10,
+          생산단계: '발주 확정', 생산완료예정일: day(ri(28, 40)), 납기일: day(ri(42, 55)), 입고일: '', 입고수량: '' };
+        prod.push(extra);
+        early.push(extra);
+      }
+      // 원부자재: 아직 생산 전인 발주에 필요한 원단·부자재
+      if (early.length) {
+        const need = early.reduce((s, x) => s + x.발주수량, 0);
+        const short = i % 6 === 5, waiting = i % 4 === 1 && !short;
+        const fabricNeed = Math.round(need * (shoes ? 0.6 : free ? 0.8 : 1.4));
+        const pos = early.map((x) => x.발주번호).join(',');
+        mat.push({ 자재코드: `F-${code}`, 자재명: `${p.name} ${shoes ? '갑피 원단' : '겉감'}`, 구분: '원단', 거래처: ['동진텍스타일', '한솔원단'][i % 2], 단위: shoes ? 'sf' : 'yd',
+          현재재고: Math.round(fabricNeed * (short ? 0.35 : waiting ? 0.55 : 1.25)), 안전재고: Math.round(fabricNeed * 0.15),
+          소요예정량: fabricNeed, 입고예정수량: Math.round(fabricNeed * (short ? 0.3 : waiting ? 0.6 : 0)), 입고예정일: short || waiting ? day(ri(3, 9)) : '',
+          사용상품코드: code, 관련발주번호: pos });
+        mat.push({ 자재코드: `T-${code}`, 자재명: `${p.name} ${shoes ? '아웃솔' : free ? '스트랩·버클' : '단추·지퍼'}`, 구분: '부자재', 거래처: '대한부자재', 단위: '세트',
+          현재재고: Math.round(need * 1.1), 안전재고: Math.round(need * 0.2), 소요예정량: need, 입고예정수량: 0, 입고예정일: '', 사용상품코드: code, 관련발주번호: pos });
+      }
+    });
+    // 공용 부자재
+    const all = top.map((_, i) => `P${pad(i + 1).padStart(3, '0')}`).join(',');
+    const openQty = prod.filter((x) => !x.입고일).reduce((s, x) => s + x.발주수량, 0);
+    mat.push({ 자재코드: 'T-CARE', 자재명: '케어라벨', 구분: '부자재', 거래처: '라벨나라', 단위: '개', 현재재고: openQty * 3, 안전재고: 1000, 소요예정량: openQty, 입고예정수량: 0, 입고예정일: '', 사용상품코드: all, 관련발주번호: '' });
+    mat.push({ 자재코드: 'T-POLY', 자재명: '폴리백', 구분: '부자재', 거래처: '대한부자재', 단위: '개', 현재재고: Math.round(openQty * 1.2), 안전재고: Math.round(openQty * 1.5), 소요예정량: openQty,
+      입고예정수량: openQty, 입고예정일: day(5), 사용상품코드: all, 관련발주번호: '' });
+    mat.push({ 자재코드: 'T-TAG', 자재명: '행택', 구분: '부자재', 거래처: '라벨나라', 단위: '개', 현재재고: openQty * 2, 안전재고: 500, 소요예정량: openQty, 입고예정수량: 0, 입고예정일: '', 사용상품코드: all, 관련발주번호: '' });
+    return { prod, stock, mat, qc };
+  }
+})();
+</script>
+</body>
+</html>
